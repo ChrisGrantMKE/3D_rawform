@@ -1,7 +1,7 @@
 # AGENTS.md — 3D_rawform
 
 ## Project Overview
-3D_rawform is an open-source spatial sketching application built with Three.js/WebGL 2.
+3D_rawform is an open-source spatial sketching application built with Three.js (WebGPU).
 It targets Microsoft Surface Pro (PWA) and Android (Capacitor APK).
 Users draw with a stylus on 2D canvases placed in 3D space, navigate with touch gestures,
 and create flythrough animations between saved camera bookmarks.
@@ -11,12 +11,12 @@ Feather 3D (3D guide surfaces, pressure brushes, liquify, live mirror).
 
 ## Tech Stack
 - **Runtime:** TypeScript (strict mode), Vite
-- **3D Engine:** Three.js (WebGL 2), custom ribbon shaders
-- **Stroke Rendering:** THREE.MeshLine → custom BufferGeometry ribbon mesh
+- **3D Engine:** Three.js (WebGPURenderer), TSL (Three Shader Language) compute shaders
+- **Stroke Rendering:** THREE.MeshLine → WebGPU Compute Shader ribbon mesh
 - **Curve Smoothing:** Catmull-Rom splines
-- **Input:** W3C Pointer Events API (pen/touch/mouse separation)
+- **Input:** W3C Pointer Events API + Web Ink API (low-latency drawing)
 - **Animation:** GSAP + THREE.Quaternion.slerp
-- **Storage:** IndexedDB via Dexie.js (local-first, no cloud)
+- **Storage:** OPFS (Origin Private File System) for binary data, Dexie.js for metadata
 - **Windows:** PWA with Workbox service worker
 - **Android:** Capacitor 6 → Gradle → APK
 - **Testing:** Vitest for unit tests
@@ -39,7 +39,7 @@ Feather 3D (3D guide surfaces, pressure brushes, liquify, live mirror).
 - **state/** — Central state management. Only StorageManager touches IndexedDB.
 - **ui/** — DOM-based UI components. No Three.js imports.
 - **export/** — File format serialization. No side effects.
-- **shaders/** — GLSL files only.
+- **shaders/** — TSL (Three Shader Language) files only. No raw GLSL.
 - **types/** — TypeScript type definitions only. No runtime code.
 
 ## Performance Constraints
@@ -47,8 +47,8 @@ Feather 3D (3D guide surfaces, pressure brushes, liquify, live mirror).
 - Maximum 100 draw calls per frame.
 - Dispose all Three.js resources (geometry, material, texture) on deletion.
 - Debounce auto-save to every 30 seconds. Save strokes immediately on pointerup.
-- Never index binary data in Dexie.js. Store raw Float32Array/ArrayBuffer.
-- Batch completed strokes per-canvas into merged BufferGeometry.
+- Use OPFS (Origin Private File System) for `Float32Array` binary data. Do not store binary data in Dexie.js.
+- Batch completed strokes per-canvas into merged WebGPU geometry.
 
 ## What NOT to Do
 - Do NOT use React, Vue, or any frontend framework. This is vanilla TS + Three.js.
@@ -57,7 +57,7 @@ Feather 3D (3D guide surfaces, pressure brushes, liquify, live mirror).
 - Do NOT add cloud/network dependencies. This app is 100% offline-capable.
 - Do NOT use `setPointerCapture()` broadly — it blocks simultaneous pen+touch inputs.
 - Do NOT use `requestAnimationFrame` manually — use the Three.js render loop.
-- Do NOT store base64 strings in IndexedDB — use raw Float32Array/ArrayBuffer.
+- Do NOT store binary stroke data in IndexedDB — use OPFS instead.
 - Do NOT add npm packages without checking bundle size impact first.
 
 ## Key References

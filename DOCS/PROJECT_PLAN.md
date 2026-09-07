@@ -125,14 +125,14 @@ The core architecture is a **Web-First 3D Hybrid** — a WebGL engine running at
 
 | Layer | Technology | Why |
 |---|---|---|
-| **Graphics** | Three.js + WebGL 2 | Mature, huge ecosystem, custom shader support, WebGPU path available |
-| **Stroke Rendering** | THREE.MeshLine + custom ribbon shaders | Variable-width pressure-sensitive strokes that perform well on mobile |
+| **Graphics** | Three.js + WebGPU | Compute shaders unlock massive performance gains over WebGL 2 |
+| **Stroke Rendering** | WebGPURenderer + TSL Compute Shaders | GPU-side geometry generation; zero CPU bottleneck for strokes |
 | **Curve Smoothing** | Catmull-Rom splines | Industry-standard interpolation that preserves drawn intent |
-| **Pen Input** | W3C Pointer Events API | Unified pen/touch/mouse handling with pressure, tilt, width/height |
+| **Pen Input** | Pointer Events API + Web Ink API | Unified handling + ultra-low latency OS compositor bypass |
 | **Touch Gestures** | Custom pointer state machine | Separate pen-draw from touch-navigate, with palm rejection heuristics |
 | **Camera Animation** | GSAP + THREE.Quaternion.slerp | Smooth keyframe interpolation without gimbal lock |
 | **Build** | Vite + TypeScript | Fast HMR, tree-shaking, type safety |
-| **Storage** | IndexedDB via Dexie.js | High-performance local-first binary storage for stroke data |
+| **Storage** | OPFS (Origin Private File System) + Dexie.js | 15x–30x faster binary storage in OPFS; metadata in Dexie |
 | **Windows Target** | PWA (Workbox service worker) | Full offline, native-feel, no install friction |
 | **Android Target** | Capacitor 6 | Wraps web app into Gradle project → installable APK |
 
@@ -240,32 +240,36 @@ The core architecture is a **Web-First 3D Hybrid** — a WebGL engine running at
 
 ### Stroke Rendering Pipeline
 
-**Problem:** WebGL has no native variable-width line rendering. We need smooth, pressure-sensitive 3D strokes that perform well on mobile.
+**Problem:** CPU-bound geometry generation for complex variable-width strokes bottlenecks performance.
 
-**Solution:** Hybrid approach using THREE.MeshLine for the initial implementation, with a custom ribbon shader for optimization.
+**Solution:** Three.js `WebGPURenderer` using **TSL (Three Shader Language)** and Compute Shaders.
 
 ```
 Pointer Event (pressure, x, y)
     │
     ▼
-Raw Point Buffer (ring buffer, ~100 points)
+Raw Point Buffer (ring buffer)
     │
     ▼
-Catmull-Rom Smoothing (configurable tension 0.3–0.7)
+Catmull-Rom Smoothing (CPU side or Compute Shader)
     │
     ▼
-Width Calculation (pressure × strokeWidthSetting × brushProfile)
+StorageBuffer (Send raw points to GPU)
     │
     ▼
-Ribbon Geometry Generation
-    ├── Phase 1: THREE.MeshLine (proven library, fast to implement)
-    │   └── Custom width callback maps pressure to line thickness
-    └── Phase 2: Custom BufferGeometry ribbon shader (higher performance)
-        └── Two triangles per segment, width perpendicular to view direction
+WebGPU Compute Shader (TSL)
+    ├── Calculates width based on pressure
+    ├── Generates left/right vertices for ribbon mesh
+    └── Bypasses CPU bottleneck entirely
     │
     ▼
-Three.js Scene → WebGL Render
+WebGPURenderer (Fallback to WebGL2 if unsupported)
 ```
+
+**Key implementation details:**
+- **TSL (Three Shader Language):** Write shaders once. They compile to WGSL (WebGPU) and GLSL (WebGL2 fallback).
+- **Compute Shaders:** Move all heavy lifting for stroke extrusion to the GPU.
+- **Draw call budget:** Target < 100 draw calls per frame. Batch completed strokes on the same canvas into merged geometry periodically.
 
 **Key implementation details:**
 - **Point sampling:** Pointer events fire at variable rates. We resample to uniform arc-length spacing (every ~2px screen distance) to prevent bunching.
@@ -324,9 +328,10 @@ Three.js Scene → WebGL Render
 ```
 
 **Key implementation details:**
+- **Web Ink API:** Use as a progressive enhancement to bypass the main thread for zero-latency ink trails.
 - Set `touch-action: none` on the canvas element to prevent browser gesture hijacking.
 - Track all active pointers in a `Map<pointerId, PointerState>` for simultaneous handling.
-- Palm rejection uses a 3-layer filter: (1) suppress all touch while pen is active, (2) reject contacts with `event.width > threshold`, (3) temporal filter — ignore touches within 100ms of last pen event.
+- Palm rejection uses a 3-layer filter: (1) suppress all touch while pen is active, (2) reject contacts with `event.width > threshold`, (3) temporal filter.
 - Do **not** use `setPointerCapture()` broadly — it blocks other simultaneous inputs.
 
 ### Canvas Projection System
@@ -394,24 +399,26 @@ function transitionTo(target: CameraBookmark) {
 
 ### Project Storage Architecture
 
-**Problem:** 3D sketch projects contain large amounts of stroke vertex data that must be saved/loaded quickly without blocking the UI.
+**Problem:** 3D sketch projects contain large amounts of stroke vertex data (`Float32Array`). Storing this in IndexedDB (Dexie) causes main-thread blocking due to Structured Clone serialization.
 
-**Solution:** IndexedDB via Dexie.js with a granular, append-friendly schema.
+**Solution:** Split architecture: **OPFS** (Origin Private File System) for raw binary data + **Dexie.js** for metadata.
 
 ```
-┌─────────────────────────────────────────────────┐
-│                  Dexie.js Schema                 │
-│                                                  │
-│  projects:    ++id, name, updatedAt              │
-│  canvases:    ++id, projectId, name, transform   │
-│  layers:      ++id, canvasId, name, order        │
-│  strokes:     ++id, layerId, timestamp           │
-│  │             (vertex data stored as            │
-│  │              raw Float32Array — NOT indexed)   │
-│  bookmarks:   ++id, projectId, name, order       │
-│  settings:    ++id, projectId                    │
-└─────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│               Hybrid Storage Architecture               │
+│                                                         │
+│  OPFS (Web Worker)           Dexie.js (IndexedDB)       │
+│  ┌─────────────────┐         ┌──────────────────────┐   │
+│  │ /project_1/     │         │ projects: ++id, name │   │
+│  │   stroke_1.bin  │ ◄────── │ strokes:  ++id, path │   │
+│  │   stroke_2.bin  │         │ canvases: ++id       │   │
+│  └─────────────────┘         └──────────────────────┘   │
+└────────────────────────────────────────────────────────┘
 ```
+
+**Key implementation details:**
+- **OPFS Performance:** Access OPFS inside a Web Worker using `FileSystemSyncAccessHandle` for synchronous, 15x–30x faster reads/writes.
+- **Never store binary in Dexie.** Dexie only holds the file paths/IDs pointing to the OPFS blobs.
 
 **Key implementation details:**
 - **Never index binary data.** Stroke vertex `Float32Array` data is stored but not indexed — only `id`, `layerId`, and `timestamp` are indexed.
@@ -614,10 +621,10 @@ Targeting **60 FPS minimum** on Surface Pro, **30+ FPS** on mid-range Android de
 
 | # | Question | Impact | Recommendation |
 |---|---|---|---|
-| 1 | **Stroke rendering:** THREE.MeshLine vs custom ribbon `BufferGeometry` from day one? | Dev speed vs. performance | Start with MeshLine (proven, fast to integrate), migrate to custom shader if perf bottleneck emerges |
-| 2 | **Project file format:** JSON with base64 vertex data vs. binary (MessagePack / CBOR)? | File size for complex projects | Start JSON for debuggability; add binary export option later if files exceed ~50MB |
-| 3 | **PWA vs. Electron for Windows:** PWA has limited filesystem access; Electron adds ~100MB but gives native file dialogs | Distribution size vs. capability | PWA — use File System Access API for save/open dialogs; avoids Electron bloat |
-| 4 | **Layer system in Phase 1 or Phase 2?** | MVP scope | Phase 2 — single implicit layer per canvas is sufficient for MVP |
-| 5 | **GSAP licensing:** GSAP is free for open-source but has a custom license. Alternative: anime.js or Tween.js? | Legal / dependency | GSAP free tier covers our use case; evaluate anime.js as lighter alternative |
-| 6 | **WebGPU readiness:** Should we plan for a WebGPU renderer path? | Future performance | Design shader abstractions to be renderer-agnostic; add WebGPU path in Phase 4 |
+| 1 | **OPFS Implementation:** OPFS requires Web Workers for max performance. Start in Phase 1? | Architecture complexity vs perf | **Resolved:** Yes. Building for OPFS + Web Workers in Phase 1 prevents a massive refactor in Phase 3. |
+| 2 | **WebGPU/TSL:** Should we start with TSL from day one? | Learning curve | **Resolved:** Yes. TSL auto-compiles to WebGL2 for fallback, meaning we get WebGPU compute shaders where supported with zero extra effort for legacy devices. |
+| 3 | **Project file format:** JSON with OPFS blobs? | Portability | Use `.rawform` as a zip archive containing the `project.json` (metadata) and the `.bin` files (strokes). |
+| 4 | **PWA vs. Electron for Windows:** PWA has limited filesystem access; Electron adds ~100MB | Distribution size | PWA — use File System Access API for native save/open dialogs; avoids Electron bloat. |
+| 5 | **Layer system in Phase 1 or Phase 2?** | MVP scope | Phase 2 — single implicit layer per canvas is sufficient for MVP. |
+| 6 | **GSAP licensing:** GSAP is free for open-source | Legal / dependency | GSAP free tier covers our use case; evaluate anime.js as lighter alternative. |
 | 7 | **Custom brush editor:** Allow users to create their own brush profiles? | Feature scope, community value | Defer to Phase 4; use preset brush profiles until then |

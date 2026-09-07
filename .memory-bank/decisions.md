@@ -62,3 +62,41 @@
 - Custom width callback maps pen pressure to line thickness
 - Migration to custom shader is straightforward — same vertex data, different rendering
 - MeshLine adds ~20KB to bundle
+
+---
+
+## ADR-005: WebGPU & TSL for Rendering Engine
+**Date:** 2026-09-07
+**Status:** Accepted
+
+**Context:** CPU-bound geometry generation for complex strokes bottlenecks performance, especially for procedural styles.
+**Decision:** Use Three.js `WebGPURenderer` and TSL (Three Shader Language).
+**Consequences:**
+- Unlocks Compute Shaders to generate ribbon geometry directly on the GPU.
+- TSL automatically compiles to WebGL2 for older devices.
+- Requires learning TSL syntax rather than raw GLSL.
+
+---
+
+## ADR-006: OPFS for Binary Storage
+**Date:** 2026-09-07
+**Status:** Accepted
+
+**Context:** Storing raw `Float32Array` in IndexedDB causes main-thread blocking due to Structured Clone serialization.
+**Decision:** Use Origin Private File System (OPFS) with `FileSystemSyncAccessHandle` inside a Web Worker.
+**Consequences:**
+- 15x–30x faster read/write speeds for stroke data.
+- Dexie.js is retained solely for metadata queries.
+- Adds architectural complexity (requires Web Worker synchronization).
+
+---
+
+## ADR-007: Web Ink API for Low-Latency Input
+**Date:** 2026-09-07
+**Status:** Accepted
+
+**Context:** WebGL/WebGPU rendering is tied to the JS main thread, creating slight latency between the pen tip and the drawn line.
+**Decision:** Implement the Web Ink API as a progressive enhancement.
+**Consequences:**
+- Zero-latency "ink trails" via direct OS compositor rendering on supported browsers (Chrome/Edge).
+- Safe fallback to standard rendering when unsupported.
