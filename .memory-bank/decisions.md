@@ -1,0 +1,64 @@
+# Architecture Decision Records — 3D_rawform
+
+## ADR-001: Three.js over Babylon.js for 3D Engine
+**Date:** 2026-09-07
+**Status:** Accepted
+
+**Context:** Needed a WebGL-based 3D engine with custom shader support, good mobile performance, and a large ecosystem.
+
+**Decision:** Use Three.js with WebGL 2.
+
+**Consequences:**
+- Massive community and documentation available
+- MeshLine library available for variable-width strokes
+- Custom GLSL shaders fully supported
+- WebGPU renderer available as future migration path
+- Bundle size is reasonable (~150KB gzipped)
+
+---
+
+## ADR-002: PWA over Electron for Windows Target
+**Date:** 2026-09-07
+**Status:** Accepted
+
+**Context:** Need a native-feeling desktop experience on Surface Pro without massive distribution overhead.
+
+**Decision:** Ship as a PWA with Workbox service worker, using the File System Access API for save/open dialogs.
+
+**Consequences:**
+- No ~100MB Electron overhead
+- Full offline support via service worker
+- File System Access API provides native save/open dialogs in Chromium browsers
+- Limitation: Firefox/Safari don't support File System Access API (fallback to download/upload)
+
+---
+
+## ADR-003: Dexie.js over raw IndexedDB for Storage
+**Date:** 2026-09-07
+**Status:** Accepted
+
+**Context:** Need fast, local-first storage for large stroke vertex data (Float32Array) with query support for project metadata.
+
+**Decision:** Use Dexie.js as the IndexedDB wrapper with a granular, append-friendly schema.
+
+**Consequences:**
+- Clean Promise-based API vs raw IndexedDB callbacks
+- `bulkAdd()`/`bulkPut()` for batch operations
+- Binary data (Float32Array) stored directly without base64 conversion
+- Binary columns intentionally not indexed to prevent database bloat
+
+---
+
+## ADR-004: MeshLine for Phase 1 Stroke Rendering
+**Date:** 2026-09-07
+**Status:** Accepted
+
+**Context:** Need variable-width, pressure-sensitive 3D strokes. WebGL has no native variable-width line support.
+
+**Decision:** Start with THREE.MeshLine (proven library), migrate to custom ribbon BufferGeometry shader if performance becomes a bottleneck.
+
+**Consequences:**
+- Fast to implement (days, not weeks)
+- Custom width callback maps pen pressure to line thickness
+- Migration to custom shader is straightforward — same vertex data, different rendering
+- MeshLine adds ~20KB to bundle
