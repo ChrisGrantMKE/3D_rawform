@@ -2,6 +2,7 @@ export interface ColorPickerCallbacks {
   onColorSelect: (color: string) => void;
   onWidthChange: (width: number) => void;
   onOpacityChange: (opacity: number) => void;
+  onProfileSelect?: (profile: 'ink' | 'marker' | 'pencil') => void;
 }
 
 /**
@@ -20,9 +21,6 @@ export class ColorPicker {
     '#0f172a', '#e2e8f0',
   ];
 
-  /**
-   * Initializes the color and brush properties panel.
-   */
   constructor(container: HTMLElement, callbacks: ColorPickerCallbacks) {
     this.container = container;
     this.callbacks = callbacks;
@@ -34,25 +32,16 @@ export class ColorPicker {
     this.container.appendChild(this.rootElement);
   }
 
-  /**
-   * Toggles the visibility of the color picker panel.
-   */
   public toggle(): void {
     this.isVisible = !this.isVisible;
     this.rootElement.style.display = this.isVisible ? 'flex' : 'none';
   }
 
-  /**
-   * Closes the panel.
-   */
   public hide(): void {
     this.isVisible = false;
     this.rootElement.style.display = 'none';
   }
 
-  /**
-   * Disposes the panel.
-   */
   public dispose(): void {
     this.rootElement.remove();
   }
@@ -62,6 +51,14 @@ export class ColorPicker {
       <div class="panel-header">
         <span>Brush & Palette</span>
         <button id="close-color-panel" class="small-btn">✕</button>
+      </div>
+      <div>
+        <div class="panel-section-title">Brush Profile</div>
+        <div style="display: flex; gap: 6px; margin-bottom: 10px;">
+          <button class="action-pill btn-profile active" data-profile="ink" style="flex: 1; justify-content: center; height: 32px; font-size: 11px;">🖋️ Ink</button>
+          <button class="action-pill btn-profile" data-profile="marker" style="flex: 1; justify-content: center; height: 32px; font-size: 11px;">🖍️ Marker</button>
+          <button class="action-pill btn-profile" data-profile="pencil" style="flex: 1; justify-content: center; height: 32px; font-size: 11px;">✏️ Pencil</button>
+        </div>
       </div>
       <div>
         <div class="panel-section-title">Color Swatches</div>
@@ -96,6 +93,17 @@ export class ColorPicker {
   private bindEvents(): void {
     this.rootElement.querySelector('#close-color-panel')?.addEventListener('click', () => {
       this.hide();
+    });
+
+    const profileBtns = this.rootElement.querySelectorAll('.btn-profile');
+    profileBtns.forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        profileBtns.forEach((b) => b.classList.remove('active'));
+        const target = e.currentTarget as HTMLElement;
+        target.classList.add('active');
+        const prof = (target.dataset.profile || 'ink') as 'ink' | 'marker' | 'pencil';
+        this.callbacks.onProfileSelect?.(prof);
+      });
     });
 
     const swatches = this.rootElement.querySelectorAll('.color-swatch');

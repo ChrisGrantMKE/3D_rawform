@@ -2,6 +2,7 @@ import Dexie, { type EntityTable } from 'dexie';
 import type { SpatialCanvasData } from '../types/canvas';
 import type { StrokeData } from '../types/stroke';
 import type { ProjectData } from '../types/project';
+import type { CameraBookmark } from '../types/bookmark';
 
 interface ProjectRecord {
   id: string;
@@ -15,6 +16,7 @@ interface ProjectRecord {
     target: [number, number, number];
     fov: number;
   };
+  bookmarks?: CameraBookmark[];
 }
 
 interface CanvasRecord extends SpatialCanvasData {
@@ -63,6 +65,7 @@ export class MetadataStore extends Dexie {
         updatedAt: project.updatedAt,
         activeCanvasId: project.activeCanvasId,
         camera: project.camera,
+        bookmarks: project.bookmarks,
       });
 
       for (const c of project.canvases) {
@@ -98,6 +101,7 @@ export class MetadataStore extends Dexie {
       camera: project.camera,
       canvases,
       strokes,
+      bookmarks: project.bookmarks || [],
     };
   }
 

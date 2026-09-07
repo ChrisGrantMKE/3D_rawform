@@ -403,6 +403,127 @@ html, body {
   box-shadow: 0 0 6px #10b981;
 }
 
+/* Layer Panel */
+.layer-panel {
+  top: 70px;
+  right: 20px;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.layer-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.layer-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+}
+
+.layer-item.active {
+  background: var(--bg-active);
+  border-color: var(--border-highlight);
+}
+
+.layer-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.layer-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.layer-opacity-row {
+  display: flex;
+  align-items: center;
+}
+
+/* Bookmark Timeline */
+.bookmark-timeline-container {
+  position: absolute;
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  min-width: 480px;
+  max-width: 90vw;
+}
+
+.timeline-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.timeline-cards-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.bookmark-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.bookmark-card:hover {
+  background: var(--bg-hover);
+}
+
+.bookmark-card.active {
+  background: var(--bg-active);
+  border-color: var(--border-highlight);
+}
+
+.bookmark-index {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent-secondary);
+  font-weight: 700;
+}
+
+.bookmark-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.bookmark-name {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.bookmark-time {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -413,3 +534,4 @@ html, body {
     transform: translateY(0);
   }
 }
+

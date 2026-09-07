@@ -3,8 +3,10 @@ import { BinaryStore } from './BinaryStore';
 import type { ProjectData } from '../types/project';
 import type { SpatialCanvasData, SpatialPlaneType } from '../types/canvas';
 import type { StrokeData } from '../types/stroke';
+import type { CameraBookmark } from '../types/bookmark';
+import type { LayerData } from '../types/layer';
 
-export type ActiveToolType = 'brush' | 'eraser' | 'pan';
+export type ActiveToolType = 'brush' | 'eraser' | 'select' | 'shape' | 'pan';
 
 export interface ProjectStateListeners {
   onActiveCanvasChanged?: (canvas: SpatialCanvasData) => void;
@@ -12,6 +14,8 @@ export interface ProjectStateListeners {
   onToolChanged?: (tool: ActiveToolType) => void;
   onColorChanged?: (color: string) => void;
   onWidthChanged?: (width: number) => void;
+  onBookmarksUpdated?: (bookmarks: CameraBookmark[]) => void;
+  onLayersUpdated?: (layers: LayerData[]) => void;
 }
 
 /**
@@ -185,8 +189,89 @@ export class ProjectState {
     }
   }
 
+  public getBookmarks(): CameraBookmark[] {
+    return this.project.bookmarks || [];
+  }
+
+  public addBookmark(bookmark: CameraBookmark): void {
+    if (!this.project.bookmarks) {
+      this.project.bookmarks = [];
+    }
+    this.project.bookmarks.push(bookmark);
+    this.listeners.onBookmarksUpdated?.(this.project.bookmarks);
+  }
+
+  public removeBookmark(bookmarkId: string): void {
+    if (!this.project.bookmarks) return;
+    this.project.bookmarks = this.project.bookmarks.filter((b) => b.id !== bookmarkId);
+    this.listeners.onBookmarksUpdated?.(this.project.bookmarks);
+  }
+
+  public getLayers(canvasId: string): LayerData[] {
+    const canvas = this.project.canvases.find((c) => c.id === canvasId);
+    return canvas?.layers || [];
+  }
+
+  public addLayer(canvasId: string, name: string): LayerData | undefined {
+    const canvas = this.project.canvases.find((c) => c.id === canvasId);
+    if (!canvas) return undefined;
+
+    if (!canvas.layers) {
+      canvas.layers = [];
+    }
+
+    const newLayer: LayerData = {
+      id: `layer_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name,
+      opacity: 1.0,
+      isVisible: true,
+      isLocked: false,
+      strokeIds: [],
+    };
+
+    canvas.layers.push(newLayer);
+    canvas.activeLayerId = newLayer.id;
+    this.listeners.onLayersUpdated?.(canvas.layers);
+    return newLayer;
+  }
+
+  public toggleLayerVisibility(canvasId: string, layerId: string): void {
+    const canvas = this.project.canvases.find((c) => c.id === canvasId);
+    const layer = canvas?.layers?.find((l) => l.id === layerId);
+    if (layer) {
+      layer.isVisible = !layer.isVisible;
+      if (canvas?.layers) this.listeners.onLayersUpdated?.(canvas.layers);
+    }
+  }
+
+  public toggleLayerLock(canvasId: string, layerId: string): void {
+    const canvas = this.project.canvases.find((c) => c.id === canvasId);
+    const layer = canvas?.layers?.find((l) => l.id === layerId);
+    if (layer) {
+      layer.isLocked = !layer.isLocked;
+      if (canvas?.layers) this.listeners.onLayersUpdated?.(canvas.layers);
+    }
+  }
+
+  public setLayerOpacity(canvasId: string, layerId: string, opacity: number): void {
+    const canvas = this.project.canvases.find((c) => c.id === canvasId);
+    const layer = canvas?.layers?.find((l) => l.id === layerId);
+    if (layer) {
+      layer.opacity = opacity;
+      if (canvas?.layers) this.listeners.onLayersUpdated?.(canvas.layers);
+    }
+  }
+
+  public deleteLayer(canvasId: string, layerId: string): void {
+    const canvas = this.project.canvases.find((c) => c.id === canvasId);
+    if (canvas && canvas.layers) {
+      canvas.layers = canvas.layers.filter((l) => l.id !== layerId);
+      this.listeners.onLayersUpdated?.(canvas.layers);
+    }
+  }
+
   /**
-   * Generates default initial project with XY canvas.
+   * Generates default initial project with XY canvas and sample bookmarks.
    */
   private createDefaultProject(): ProjectData {
     const defaultCanvasId = 'canvas_main';
@@ -202,6 +287,17 @@ export class ProjectState {
       isVisible: true,
       isLocked: false,
       strokeIds: [],
+      layers: [
+        {
+          id: 'layer_default',
+          name: 'Base Layer',
+          opacity: 1.0,
+          isVisible: true,
+          isLocked: false,
+          strokeIds: [],
+        },
+      ],
+      activeLayerId: 'layer_default',
     };
 
     return {
@@ -218,6 +314,28 @@ export class ProjectState {
       },
       canvases: [mainCanvas],
       strokes: [],
+      bookmarks: [
+        {
+          id: 'bm_default_1',
+          name: 'Perspective View',
+          position: [5, 4, 8],
+          target: [0, 0, 0],
+          fov: 45,
+          duration: 2.0,
+          holdTime: 0.5,
+          easing: 'power2.inOut',
+        },
+        {
+          id: 'bm_default_2',
+          name: 'Front View',
+          position: [0, 0, 8],
+          target: [0, 0, 0],
+          fov: 45,
+          duration: 2.0,
+          holdTime: 0.5,
+          easing: 'power2.inOut',
+        },
+      ],
     };
   }
 }

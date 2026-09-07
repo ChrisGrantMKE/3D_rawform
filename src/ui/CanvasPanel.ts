@@ -3,6 +3,8 @@ import type { SpatialCanvasData, SpatialPlaneType } from '../types/canvas';
 export interface CanvasPanelCallbacks {
   onSelectCanvas: (canvasId: string) => void;
   onCreateCanvas: (name: string, planeType: SpatialPlaneType) => void;
+  onCreateParallel?: (distance: number) => void;
+  onCreateHinge?: (edge: 'top' | 'bottom' | 'left' | 'right', angleDeg: number) => void;
   onSnapToCanvas: (canvasId: string) => void;
 }
 
@@ -16,9 +18,6 @@ export class CanvasPanel {
   private isVisible: boolean = false;
   private canvasListContainer!: HTMLElement;
 
-  /**
-   * Initializes the canvas management panel.
-   */
   constructor(container: HTMLElement, callbacks: CanvasPanelCallbacks) {
     this.container = container;
     this.callbacks = callbacks;
@@ -30,25 +29,16 @@ export class CanvasPanel {
     this.container.appendChild(this.rootElement);
   }
 
-  /**
-   * Toggles panel visibility.
-   */
   public toggle(): void {
     this.isVisible = !this.isVisible;
     this.rootElement.style.display = this.isVisible ? 'flex' : 'none';
   }
 
-  /**
-   * Closes panel.
-   */
   public hide(): void {
     this.isVisible = false;
     this.rootElement.style.display = 'none';
   }
 
-  /**
-   * Updates list of spatial canvases rendered in the panel.
-   */
   public updateCanvases(canvases: SpatialCanvasData[], activeId: string): void {
     this.canvasListContainer.innerHTML = canvases
       .map(
@@ -66,9 +56,6 @@ export class CanvasPanel {
     this.bindListEvents();
   }
 
-  /**
-   * Disposes the panel.
-   */
   public dispose(): void {
     this.rootElement.remove();
   }
@@ -80,10 +67,16 @@ export class CanvasPanel {
         <button id="close-canvas-panel" class="small-btn">✕</button>
       </div>
       <div class="canvas-list" id="canvas-items-container"></div>
-      <div style="display: flex; gap: 6px; margin-top: 8px;">
-        <button id="add-xy-canvas" class="action-pill" style="flex: 1; justify-content: center;">+ Front (XY)</button>
-        <button id="add-xz-canvas" class="action-pill" style="flex: 1; justify-content: center;">+ Top (XZ)</button>
-        <button id="add-yz-canvas" class="action-pill" style="flex: 1; justify-content: center;">+ Side (YZ)</button>
+      <div class="panel-section-title" style="margin-top: 8px;">Standard Planes</div>
+      <div style="display: flex; gap: 6px;">
+        <button id="add-xy-canvas" class="action-pill" style="flex: 1; justify-content: center; font-size: 11px; height: 32px;">+ XY Front</button>
+        <button id="add-xz-canvas" class="action-pill" style="flex: 1; justify-content: center; font-size: 11px; height: 32px;">+ XZ Top</button>
+        <button id="add-yz-canvas" class="action-pill" style="flex: 1; justify-content: center; font-size: 11px; height: 32px;">+ YZ Side</button>
+      </div>
+      <div class="panel-section-title" style="margin-top: 8px;">Canvas Projections</div>
+      <div style="display: flex; gap: 6px;">
+        <button id="add-parallel-canvas" class="action-pill" style="flex: 1; justify-content: center; font-size: 11px; height: 32px;">+ Parallel (+2m)</button>
+        <button id="add-hinge-canvas" class="action-pill" style="flex: 1; justify-content: center; font-size: 11px; height: 32px;">+ Hinge Wall (90°)</button>
       </div>
     `;
 
@@ -106,6 +99,14 @@ export class CanvasPanel {
 
     this.rootElement.querySelector('#add-yz-canvas')?.addEventListener('click', () => {
       this.callbacks.onCreateCanvas('Profile (YZ)', 'YZ');
+    });
+
+    this.rootElement.querySelector('#add-parallel-canvas')?.addEventListener('click', () => {
+      this.callbacks.onCreateParallel?.(2.0);
+    });
+
+    this.rootElement.querySelector('#add-hinge-canvas')?.addEventListener('click', () => {
+      this.callbacks.onCreateHinge?.('right', 90);
     });
   }
 

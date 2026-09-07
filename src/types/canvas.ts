@@ -1,3 +1,5 @@
+import type { LayerData } from './layer';
+
 /**
  * Standard spatial plane orientation.
  */
@@ -18,4 +20,6 @@ export interface SpatialCanvasData {
   isVisible: boolean;
   isLocked: boolean;
   strokeIds: string[];
+  layers?: LayerData[];
+  activeLayerId?: string;
 }

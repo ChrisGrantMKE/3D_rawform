@@ -1,5 +1,6 @@
 import type { SpatialCanvasData } from './canvas';
 import type { StrokeData } from './stroke';
+import type { CameraBookmark } from './bookmark';
 
 /**
  * Camera position and orientation snapshot.
@@ -23,4 +24,5 @@ export interface ProjectData {
   camera: CameraState;
   canvases: SpatialCanvasData[];
   strokes: StrokeData[];
+  bookmarks: CameraBookmark[];
 }
