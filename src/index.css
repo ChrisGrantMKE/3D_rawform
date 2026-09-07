@@ -413,6 +413,23 @@ html, body {
   gap: 10px;
 }
 
+/* Guide & Symmetry Panel */
+.guide-panel {
+  top: 70px;
+  right: 290px;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.guide-type-btn.active,
+.mirror-axis-btn.active {
+  background: var(--bg-active);
+  border-color: var(--border-highlight);
+  color: var(--accent-secondary);
+}
+
 .layer-list {
   display: flex;
   flex-direction: column;

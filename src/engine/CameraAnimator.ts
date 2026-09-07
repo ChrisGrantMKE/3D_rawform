@@ -157,6 +157,17 @@ export class CameraAnimator {
   }
 
   /**
+   * Creates an offline GSAP timeline for deterministic frame-by-frame rendering.
+   */
+  public createOfflineTimeline(bookmarks: CameraBookmark[]): gsap.core.Timeline {
+    const tl = gsap.timeline({ paused: true });
+    for (let i = 0; i < bookmarks.length - 1; i++) {
+      this.addTourSegment(tl, bookmarks[i], bookmarks[i + 1], i);
+    }
+    return tl;
+  }
+
+  /**
    * Constructs an individual transition segment between two bookmarks.
    */
   private addTourSegment(

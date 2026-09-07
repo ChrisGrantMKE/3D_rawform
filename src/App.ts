@@ -3,11 +3,13 @@ import { SpatialCanvas } from './engine/SpatialCanvas';
 import { StrokeRenderer } from './engine/StrokeRenderer';
 import { CameraAnimator } from './engine/CameraAnimator';
 import { CanvasProjection } from './engine/CanvasProjection';
+import { GuideSurface } from './engine/GuideSurface';
 import { InputManager } from './input/InputManager';
 import { BrushTool } from './tools/BrushTool';
 import { EraserTool } from './tools/EraserTool';
 import { SelectionTool } from './tools/SelectionTool';
 import { ShapeTool } from './tools/ShapeTool';
+import { LiquifyTool } from './tools/LiquifyTool';
 import { Tool } from './tools/Tool';
 import { ProjectState, type ActiveToolType } from './state/ProjectState';
 import { UndoRedoManager } from './state/UndoRedoManager';
@@ -15,9 +17,12 @@ import { Toolbar } from './ui/Toolbar';
 import { ColorPicker } from './ui/ColorPicker';
 import { CanvasPanel } from './ui/CanvasPanel';
 import { LayerPanel } from './ui/LayerPanel';
+import { GuidePanel } from './ui/GuidePanel';
 import { BookmarkTimeline } from './ui/BookmarkTimeline';
 import { ImageExporter } from './export/ImageExporter';
 import { GLTFExporterWrapper } from './export/GLTFExporterWrapper';
+import { VideoExporter } from './export/VideoExporter';
+import { AssetImporter } from './export/AssetImporter';
 import type { SpatialPlaneType, SpatialCanvasData } from './types/canvas';
 import type { CameraBookmark } from './types/bookmark';
 
@@ -30,6 +35,7 @@ export class App {
 
   private sceneManager!: SceneManager;
   private strokeRenderer!: StrokeRenderer;
+  private guideSurface!: GuideSurface;
   private cameraAnimator!: CameraAnimator;
   private inputManager!: InputManager;
   private projectState!: ProjectState;
@@ -40,12 +46,14 @@ export class App {
   private eraserTool!: EraserTool;
   private selectionTool!: SelectionTool;
   private shapeTool!: ShapeTool;
+  private liquifyTool!: LiquifyTool;
   private currentTool!: Tool;
 
   private toolbar!: Toolbar;
   private colorPicker!: ColorPicker;
   private canvasPanel!: CanvasPanel;
   private layerPanel!: LayerPanel;
+  private guidePanel!: GuidePanel;
   private bookmarkTimeline!: BookmarkTimeline;
   private gltfExporter: GLTFExporterWrapper = new GLTFExporterWrapper();
 
@@ -67,6 +75,9 @@ export class App {
     await this.sceneManager.init();
 
     this.strokeRenderer = new StrokeRenderer(this.sceneManager.scene);
+    this.guideSurface = new GuideSurface();
+    this.sceneManager.scene.add(this.guideSurface.getObject());
+
     this.cameraAnimator = new CameraAnimator(this.sceneManager.camera, this.sceneManager.cameraController);
     this.projectState = new ProjectState();
     this.undoManager = new UndoRedoManager();
@@ -101,7 +112,8 @@ export class App {
       this.undoManager,
       this.sceneManager.camera,
       this.inputManager.getInkPresenter(),
-      activeCanvasProvider
+      activeCanvasProvider,
+      () => this.guideSurface
     );
 
     this.eraserTool = new EraserTool(
@@ -120,6 +132,14 @@ export class App {
     );
 
     this.shapeTool = new ShapeTool(
+      this.strokeRenderer,
+      this.projectState,
+      this.undoManager,
+      this.sceneManager.camera,
+      activeCanvasProvider
+    );
+
+    this.liquifyTool = new LiquifyTool(
       this.strokeRenderer,
       this.projectState,
       this.undoManager,
@@ -174,29 +194,46 @@ export class App {
         if (active) this.projectState.addLayer(active.id, name);
       },
       onSelectLayer: () => {},
-      onToggleVisibility: (lId) => {
+      onToggleVisibility: (layerId) => {
         const active = this.projectState.getActiveCanvas();
-        if (active) this.projectState.toggleLayerVisibility(active.id, lId);
+        if (active) this.projectState.toggleLayerVisibility(active.id, layerId);
       },
-      onToggleLock: (lId) => {
+      onToggleLock: (layerId) => {
         const active = this.projectState.getActiveCanvas();
-        if (active) this.projectState.toggleLayerLock(active.id, lId);
+        if (active) this.projectState.toggleLayerLock(active.id, layerId);
       },
-      onLayerOpacityChange: (lId, op) => {
+      onLayerOpacityChange: (layerId, op) => {
         const active = this.projectState.getActiveCanvas();
-        if (active) this.projectState.setLayerOpacity(active.id, lId, op);
+        if (active) this.projectState.setLayerOpacity(active.id, layerId, op);
       },
-      onDeleteLayer: (lId) => {
+      onDeleteLayer: () => {},
+    });
+
+    this.guidePanel = new GuidePanel(this.uiLayer, {
+      onSelectGuideType: (type) => this.guideSurface.setType(type),
+      onDimensionsChanged: (r, h) => this.guideSurface.setDimensions(r, h),
+      onToggleGuideVisibility: (v) => this.guideSurface.setVisible(v),
+      onSelectMirrorAxis: (axis) => this.brushTool.setMirrorAxis(axis),
+      onImportImage: async (file) => {
         const active = this.projectState.getActiveCanvas();
-        if (active) this.projectState.deleteLayer(active.id, lId);
+        const activeSpatial = active ? this.spatialCanvases.get(active.id) : undefined;
+        const mesh = await AssetImporter.importReferenceImage(file, activeSpatial);
+        this.sceneManager.scene.add(mesh);
+      },
+      onImportModel: async (file) => {
+        const model = await AssetImporter.importGLTFModel(file);
+        this.sceneManager.scene.add(model);
       },
     });
 
     this.bookmarkTimeline = new BookmarkTimeline(this.uiLayer, {
-      onAddBookmark: () => this.handleAddBookmark(),
-      onSelectBookmark: (b) => this.cameraAnimator.flyToBookmark(b),
-      onDeleteBookmark: (id) => {
-        this.projectState.removeBookmark(id);
+      onSelectBookmark: (bm) => this.cameraAnimator.flyToBookmark(bm),
+      onAddBookmark: () => {
+        this.handleAddBookmark();
+        this.bookmarkTimeline.updateBookmarks(this.projectState.getBookmarks());
+      },
+      onDeleteBookmark: (bmId) => {
+        this.projectState.removeBookmark(bmId);
         this.bookmarkTimeline.updateBookmarks(this.projectState.getBookmarks());
       },
       onPlayTour: () => {
@@ -230,6 +267,7 @@ export class App {
         }
         this.layerPanel.toggle();
       },
+      onToggleGuidePanel: () => this.guidePanel.toggle(),
       onToggleTimeline: () => this.bookmarkTimeline.toggle(),
       onSnapView: () => this.snapToActiveCanvas(),
       onUndo: () => this.undoManager.undo(),
@@ -261,6 +299,8 @@ export class App {
       this.currentTool = this.selectionTool;
     } else if (tool === 'shape') {
       this.currentTool = this.shapeTool;
+    } else if (tool === 'liquify') {
+      this.currentTool = this.liquifyTool;
     } else {
       this.currentTool = this.brushTool;
     }
@@ -291,6 +331,7 @@ export class App {
       <div class="top-actions ui-interactive">
         <button id="btn-export-png" class="action-pill">📷 Snapshot</button>
         <button id="btn-export-glb" class="action-pill">📦 Export 3D</button>
+        <button id="btn-export-mp4" class="action-pill">🎬 Export MP4</button>
       </div>
     `;
 
@@ -300,6 +341,38 @@ export class App {
 
     header.querySelector('#btn-export-glb')?.addEventListener('click', () => {
       this.gltfExporter.downloadGLB(this.sceneManager.scene);
+    });
+
+    header.querySelector('#btn-export-mp4')?.addEventListener('click', async () => {
+      const bookmarks = this.projectState.getBookmarks();
+      if (bookmarks.length < 2) {
+        alert('Please create at least 2 camera bookmarks in the timeline to export a flythrough tour video.');
+        return;
+      }
+      const btn = header.querySelector('#btn-export-mp4') as HTMLButtonElement;
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '⏳ Rendering MP4...';
+      try {
+        await VideoExporter.exportFlythrough(
+          this.sceneManager.renderer.domElement,
+          () => this.sceneManager.render(),
+          this.cameraAnimator,
+          bookmarks,
+          {
+            fps: 30,
+            onProgress: (p) => {
+              btn.textContent = `🎬 ${Math.round(p * 100)}%`;
+            },
+          }
+        );
+      } catch (err) {
+        console.error('Failed to export video:', err);
+        alert(`Video export failed: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = originalText;
+      }
     });
 
     this.uiLayer.appendChild(header);
@@ -423,6 +496,7 @@ export class App {
   public dispose(): void {
     this.sceneManager.dispose();
     this.strokeRenderer.dispose();
+    this.guideSurface.dispose();
     this.cameraAnimator.dispose();
     this.inputManager.dispose();
     this.projectState.dispose();
@@ -430,6 +504,7 @@ export class App {
     this.colorPicker.dispose();
     this.canvasPanel.dispose();
     this.layerPanel.dispose();
+    this.guidePanel.dispose();
     this.bookmarkTimeline.dispose();
   }
 }

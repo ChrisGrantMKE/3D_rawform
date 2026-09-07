@@ -1,38 +1,42 @@
-import { Raycaster, Vector2, PerspectiveCamera } from 'three/webgpu';
+import { Raycaster, Vector2, Vector3, PerspectiveCamera } from 'three/webgpu';
 import { Tool } from './Tool';
 import { CurveSmoothing } from '../engine/CurveSmoothing';
 import type { StrokeRenderer } from '../engine/StrokeRenderer';
 import type { SpatialCanvas } from '../engine/SpatialCanvas';
+import type { GuideSurface } from '../engine/GuideSurface';
 import type { ProjectState } from '../state/ProjectState';
 import type { UndoRedoManager, Command } from '../state/UndoRedoManager';
 import type { InkPresenter } from '../input/InkPresenter';
 import type { StrokePoint, StrokeData } from '../types/stroke';
 
 /**
- * Command for adding a stroke with undo/redo capability.
+ * Command for adding one or multiple strokes with undo/redo capability.
  */
-class AddStrokeCommand implements Command {
+class AddStrokesBatchCommand implements Command {
   constructor(
     private state: ProjectState,
     private renderer: StrokeRenderer,
-    private stroke: StrokeData,
-    private binaryBuffer: Float32Array,
-    private points: StrokePoint[]
+    private strokes: { data: StrokeData; binary: Float32Array; points: StrokePoint[] }[]
   ) {}
 
   public async execute(): Promise<void> {
-    await this.state.addStroke(this.stroke, this.binaryBuffer);
-    this.renderer.renderStoredStroke(this.stroke, this.points);
+    for (const item of this.strokes) {
+      await this.state.addStroke(item.data, item.binary);
+      this.renderer.renderStoredStroke(item.data, item.points);
+    }
   }
 
   public async undo(): Promise<void> {
-    this.renderer.removeStroke(this.stroke.id);
-    await this.state.removeStroke(this.stroke.id);
+    for (const item of this.strokes) {
+      this.renderer.removeStroke(item.data.id);
+      await this.state.removeStroke(item.data.id);
+    }
   }
 }
 
 /**
- * Tool for drawing spatial ribbons onto active canvas planes.
+ * Tool for drawing spatial ribbons onto active canvas planes and 3D guide surfaces.
+ * Supports live symmetry/mirror sketching across X, Y, or Z planes.
  */
 export class BrushTool extends Tool {
   public readonly name: string = 'BrushTool';
@@ -43,11 +47,15 @@ export class BrushTool extends Tool {
   private readonly camera: PerspectiveCamera;
   private readonly inkPresenter: InkPresenter;
   private activeCanvasProvider: () => SpatialCanvas | undefined;
+  private guideSurfaceProvider?: () => GuideSurface | undefined;
 
   private isDrawing: boolean = false;
   private collectedPoints: StrokePoint[] = [];
   private raycaster: Raycaster = new Raycaster();
   private ndc: Vector2 = new Vector2();
+
+  private mirrorAxis: 'x' | 'y' | 'z' | null = null;
+  private mirrorOrigin: Vector3 = new Vector3(0, 0, 0);
 
   /**
    * Initializes the brush tool with required subsystem references.
@@ -58,7 +66,8 @@ export class BrushTool extends Tool {
     undoManager: UndoRedoManager,
     camera: PerspectiveCamera,
     inkPresenter: InkPresenter,
-    activeCanvasProvider: () => SpatialCanvas | undefined
+    activeCanvasProvider: () => SpatialCanvas | undefined,
+    guideSurfaceProvider?: () => GuideSurface | undefined
   ) {
     super();
     this.renderer = renderer;
@@ -67,13 +76,33 @@ export class BrushTool extends Tool {
     this.camera = camera;
     this.inkPresenter = inkPresenter;
     this.activeCanvasProvider = activeCanvasProvider;
+    this.guideSurfaceProvider = guideSurfaceProvider;
+  }
+
+  /**
+   * Sets or clears the active 3D mirror symmetry plane.
+   */
+  public setMirrorAxis(axis: 'x' | 'y' | 'z' | null, origin: Vector3 = new Vector3(0, 0, 0)): void {
+    this.mirrorAxis = axis;
+    this.mirrorOrigin.copy(origin);
+  }
+
+  /**
+   * Returns current mirror symmetry axis.
+   */
+  public getMirrorAxis(): 'x' | 'y' | 'z' | null {
+    return this.mirrorAxis;
+  }
+
+  /**
+   * Sets the guide surface provider.
+   */
+  public setGuideSurfaceProvider(provider: () => GuideSurface | undefined): void {
+    this.guideSurfaceProvider = provider;
   }
 
   public onPointerDown(point: StrokePoint, _samples: StrokePoint[], event: PointerEvent): void {
-    const canvas = this.activeCanvasProvider();
-    if (!canvas) return;
-
-    const hit = this.raycastCanvas(point.x, point.y, canvas);
+    const hit = this.findHitPoint(point.x, point.y);
     if (!hit) return;
 
     this.isDrawing = true;
@@ -89,17 +118,20 @@ export class BrushTool extends Tool {
     const width = this.calculateWidth(point.pressure);
 
     this.renderer.beginStroke(initial3DPoint, this.state.getColor(), width, this.state.getOpacity());
+
+    if (this.mirrorAxis) {
+      const mirrorPoint = this.reflectPoint(initial3DPoint);
+      this.renderer.beginMirrorStroke(mirrorPoint, this.state.getColor(), width, this.state.getOpacity());
+    }
+
     this.inkPresenter.updateTrail(event, this.state.getColor(), width * 20);
   }
 
   public onPointerMove(point: StrokePoint, samples: StrokePoint[], event: PointerEvent): void {
     if (!this.isDrawing) return;
 
-    const canvas = this.activeCanvasProvider();
-    if (!canvas) return;
-
     for (const sample of samples) {
-      const hit = this.raycastCanvas(sample.x, sample.y, canvas);
+      const hit = this.findHitPoint(sample.x, sample.y);
       if (hit) {
         this.collectedPoints.push({
           ...hit,
@@ -114,6 +146,11 @@ export class BrushTool extends Tool {
     if (this.collectedPoints.length >= 2) {
       const smoothed = CurveSmoothing.smooth(this.collectedPoints, 0.04, 0.5);
       this.renderer.updateActiveStroke(smoothed);
+
+      if (this.mirrorAxis) {
+        const mirroredSmoothed = smoothed.map((p) => this.reflectPoint(p));
+        this.renderer.updateActiveMirrorStroke(mirroredSmoothed);
+      }
     }
 
     const width = this.calculateWidth(point.pressure);
@@ -134,10 +171,10 @@ export class BrushTool extends Tool {
     this.renderer.endStroke(strokeId);
 
     const activeCanvas = this.activeCanvasProvider();
-    const canvasId = activeCanvas ? activeCanvas.id : 'unknown';
+    const canvasId = activeCanvas ? activeCanvas.id : 'spatial_guide';
     const smoothedPoints = CurveSmoothing.smooth(this.collectedPoints, 0.04, 0.5);
 
-    const strokeData: StrokeData = {
+    const primaryStrokeData: StrokeData = {
       id: strokeId,
       canvasId,
       color: this.state.getColor(),
@@ -147,15 +184,35 @@ export class BrushTool extends Tool {
       timestamp: Date.now(),
     };
 
-    const binary = this.serializePointsToBuffer(smoothedPoints);
-    const command = new AddStrokeCommand(
-      this.state,
-      this.renderer,
-      strokeData,
-      binary,
-      smoothedPoints
-    );
+    const batch: { data: StrokeData; binary: Float32Array; points: StrokePoint[] }[] = [
+      {
+        data: primaryStrokeData,
+        binary: this.serializePointsToBuffer(smoothedPoints),
+        points: smoothedPoints,
+      },
+    ];
 
+    if (this.mirrorAxis) {
+      const mirrorStrokeId = `stroke_mirror_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      this.renderer.endMirrorStroke(mirrorStrokeId);
+      const mirrorPoints = smoothedPoints.map((p) => this.reflectPoint(p));
+      const mirrorStrokeData: StrokeData = {
+        id: mirrorStrokeId,
+        canvasId,
+        color: this.state.getColor(),
+        width: this.state.getWidth(),
+        opacity: this.state.getOpacity(),
+        pointCount: mirrorPoints.length,
+        timestamp: Date.now(),
+      };
+      batch.push({
+        data: mirrorStrokeData,
+        binary: this.serializePointsToBuffer(mirrorPoints),
+        points: mirrorPoints,
+      });
+    }
+
+    const command = new AddStrokesBatchCommand(this.state, this.renderer, batch);
     this.undoManager.execute(command);
     this.collectedPoints = [];
   }
@@ -173,6 +230,20 @@ export class BrushTool extends Tool {
     return base * (0.3 + 1.4 * pressure);
   }
 
+  private findHitPoint(screenX: number, screenY: number): { x: number; y: number; z: number } | null {
+    const guideSurface = this.guideSurfaceProvider?.();
+    if (guideSurface && guideSurface.isActive()) {
+      const guideHit = guideSurface.intersectScreen(screenX, screenY, this.camera);
+      if (guideHit) {
+        return { x: guideHit.x, y: guideHit.y, z: guideHit.z };
+      }
+    }
+
+    const canvas = this.activeCanvasProvider();
+    if (!canvas) return null;
+    return this.raycastCanvas(screenX, screenY, canvas);
+  }
+
   private raycastCanvas(
     screenX: number,
     screenY: number,
@@ -186,6 +257,18 @@ export class BrushTool extends Tool {
     if (!hit) return null;
 
     return { x: hit.x, y: hit.y, z: hit.z };
+  }
+
+  private reflectPoint(p: StrokePoint): StrokePoint {
+    const reflected = { ...p };
+    if (this.mirrorAxis === 'x') {
+      reflected.x = 2 * this.mirrorOrigin.x - p.x;
+    } else if (this.mirrorAxis === 'y') {
+      reflected.y = 2 * this.mirrorOrigin.y - p.y;
+    } else if (this.mirrorAxis === 'z') {
+      reflected.z = 2 * this.mirrorOrigin.z - p.z;
+    }
+    return reflected;
   }
 
   private serializePointsToBuffer(points: StrokePoint[]): Float32Array {

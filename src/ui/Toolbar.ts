@@ -5,6 +5,7 @@ export interface ToolbarCallbacks {
   onToggleColorPanel: () => void;
   onToggleCanvasPanel: () => void;
   onToggleLayerPanel: () => void;
+  onToggleGuidePanel: () => void;
   onToggleTimeline: () => void;
   onSnapView: () => void;
   onUndo: () => void;
@@ -24,6 +25,7 @@ export class Toolbar {
   private btnEraser!: HTMLButtonElement;
   private btnSelect!: HTMLButtonElement;
   private btnShape!: HTMLButtonElement;
+  private btnLiquify!: HTMLButtonElement;
   private btnUndo!: HTMLButtonElement;
   private btnRedo!: HTMLButtonElement;
 
@@ -42,6 +44,7 @@ export class Toolbar {
     this.btnEraser.classList.toggle('active', activeTool === 'eraser');
     this.btnSelect.classList.toggle('active', activeTool === 'select');
     this.btnShape.classList.toggle('active', activeTool === 'shape');
+    this.btnLiquify.classList.toggle('active', activeTool === 'liquify');
   }
 
   public updateHistoryState(canUndo: boolean, canRedo: boolean): void {
@@ -68,6 +71,9 @@ export class Toolbar {
         <button id="tool-shape" class="tool-button" title="Geometric Shapes">
           <svg viewBox="0 0 24 24"><path d="M12 2l-5.5 9h11L12 2zm0 3.84L13.93 9h-3.86L12 5.84zM17.5 13c-2.49 0-4.5 2.01-4.5 4.5s2.01 4.5 4.5 4.5 4.5-2.01 4.5-4.5-2.01-4.5-4.5-4.5zm0 7c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM3 13.5h8v8H3z"/></svg>
         </button>
+        <button id="tool-liquify" class="tool-button" title="3D Liquify Warp">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+        </button>
       </div>
       <div class="toolbar-separator"></div>
       <div class="toolbar-group">
@@ -79,6 +85,9 @@ export class Toolbar {
         </button>
         <button id="btn-layers" class="tool-button" title="Canvas Layers">
           <svg viewBox="0 0 24 24"><path d="M11.99 18.54l-7.37-5.73L3 14.07l9 7 9-7-1.63-1.27-7.38 5.74zM12 16l7.36-5.73L21 9.07l-9-7-9 7 1.63 1.27L12 16z"/></svg>
+        </button>
+        <button id="btn-guides" class="tool-button" title="3D Guides & Mirror">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm0-15.86v1.93c-1.1 0-2 .9-2 2H7V7c0-.55-.45-1-1-1H4.21C5.54 3.93 8.52 2.37 11 2.07z"/></svg>
         </button>
         <button id="btn-snap" class="tool-button" title="Snap View to Canvas">
           <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
@@ -102,6 +111,7 @@ export class Toolbar {
     this.btnEraser = this.rootElement.querySelector('#tool-eraser') as HTMLButtonElement;
     this.btnSelect = this.rootElement.querySelector('#tool-select') as HTMLButtonElement;
     this.btnShape = this.rootElement.querySelector('#tool-shape') as HTMLButtonElement;
+    this.btnLiquify = this.rootElement.querySelector('#tool-liquify') as HTMLButtonElement;
     this.btnUndo = this.rootElement.querySelector('#btn-undo') as HTMLButtonElement;
     this.btnRedo = this.rootElement.querySelector('#btn-redo') as HTMLButtonElement;
 
@@ -113,6 +123,7 @@ export class Toolbar {
     this.btnEraser.addEventListener('click', () => this.callbacks.onToolSelect('eraser'));
     this.btnSelect.addEventListener('click', () => this.callbacks.onToolSelect('select'));
     this.btnShape.addEventListener('click', () => this.callbacks.onToolSelect('shape'));
+    this.btnLiquify.addEventListener('click', () => this.callbacks.onToolSelect('liquify'));
 
     this.rootElement.querySelector('#btn-color')?.addEventListener('click', () => {
       this.callbacks.onToggleColorPanel();
@@ -124,6 +135,10 @@ export class Toolbar {
 
     this.rootElement.querySelector('#btn-layers')?.addEventListener('click', () => {
       this.callbacks.onToggleLayerPanel();
+    });
+
+    this.rootElement.querySelector('#btn-guides')?.addEventListener('click', () => {
+      this.callbacks.onToggleGuidePanel();
     });
 
     this.rootElement.querySelector('#btn-snap')?.addEventListener('click', () => {

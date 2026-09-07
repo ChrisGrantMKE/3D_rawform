@@ -10,6 +10,7 @@ export class StrokeRenderer {
   private readonly strokeGroup: Group;
   private readonly strokeMeshMap: Map<string, MeshLine>;
   private activeMeshLine: MeshLine | null = null;
+  private activeMirrorMeshLine: MeshLine | null = null;
 
   /**
    * Initializes the stroke renderer attached to the scene.
@@ -22,6 +23,13 @@ export class StrokeRenderer {
     this.strokeGroup.name = 'StrokeRenderer_Group';
     this.scene.add(this.strokeGroup);
     this.strokeMeshMap = new Map();
+  }
+
+  /**
+   * Returns a map of all rendered stroke meshes.
+   */
+  public getStrokeMeshMap(): Map<string, MeshLine> {
+    return this.strokeMeshMap;
   }
 
   /**
@@ -128,6 +136,20 @@ export class StrokeRenderer {
   }
 
   /**
+   * Updates geometry and positions for an existing stored stroke.
+   *
+   * @param stroke - Stored stroke metadata
+   * @param points - Updated stroke points
+   */
+  public updateStoredStroke(stroke: StrokeData, points: StrokePoint[]): void {
+    if (points.length < 2) {
+      return;
+    }
+    this.removeStroke(stroke.id);
+    this.renderStoredStroke(stroke, points);
+  }
+
+  /**
    * Removes a stroke from the scene and disposes its GPU resources.
    *
    * @param strokeId - Unique identifier of the stroke to remove
@@ -144,6 +166,58 @@ export class StrokeRenderer {
   }
 
   /**
+   * Begins rendering an interactive mirrored stylus stroke in real-time.
+   */
+  public beginMirrorStroke(
+    initialPoint: StrokePoint,
+    color: string,
+    baseWidth: number,
+    opacity: number = 1.0
+  ): void {
+    const coords: [number, number, number][] = [
+      [initialPoint.x, initialPoint.y, initialPoint.z],
+      [initialPoint.x + 0.0001, initialPoint.y, initialPoint.z],
+    ];
+
+    const meshLine = new MeshLine({
+      lineWidth: baseWidth,
+      color: color,
+      opacity: opacity,
+      transparent: opacity < 1.0,
+      sizeAttenuation: true,
+      dynamic: true,
+    });
+
+    meshLine.lines(coords);
+    meshLine.build();
+
+    this.activeMirrorMeshLine = meshLine;
+    this.strokeGroup.add(meshLine as unknown as Object3D);
+  }
+
+  /**
+   * Updates coordinates of the active mirror stroke.
+   */
+  public updateActiveMirrorStroke(points: StrokePoint[]): void {
+    if (!this.activeMirrorMeshLine || points.length < 2) return;
+    const coords: [number, number, number][] = points.map((p) => [p.x, p.y, p.z]);
+    this.activeMirrorMeshLine.setPositions(coords);
+  }
+
+  /**
+   * Finalizes active mirror stroke and registers ID.
+   */
+  public endMirrorStroke(strokeId: string): MeshLine | null {
+    if (!this.activeMirrorMeshLine) return null;
+    const completed = this.activeMirrorMeshLine;
+    completed.name = `Stroke_${strokeId}`;
+    completed.dynamic(false);
+    this.strokeMeshMap.set(strokeId, completed);
+    this.activeMirrorMeshLine = null;
+    return completed;
+  }
+
+  /**
    * Cancels any currently active in-progress stroke without saving.
    */
   public cancelActiveStroke(): void {
@@ -151,6 +225,11 @@ export class StrokeRenderer {
       this.strokeGroup.remove(this.activeMeshLine as unknown as Object3D);
       this.activeMeshLine.dispose();
       this.activeMeshLine = null;
+    }
+    if (this.activeMirrorMeshLine) {
+      this.strokeGroup.remove(this.activeMirrorMeshLine as unknown as Object3D);
+      this.activeMirrorMeshLine.dispose();
+      this.activeMirrorMeshLine = null;
     }
   }
 

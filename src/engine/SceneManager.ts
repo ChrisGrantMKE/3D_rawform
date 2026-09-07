@@ -89,6 +89,13 @@ export class SceneManager {
   }
 
   /**
+   * Performs an immediate synchronous render pass.
+   */
+  public render(): void {
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  /**
    * Disposes of the renderer and listeners.
    */
   public dispose(): void {

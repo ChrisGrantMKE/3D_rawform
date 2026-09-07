@@ -6,7 +6,7 @@ import type { StrokeData } from '../types/stroke';
 import type { CameraBookmark } from '../types/bookmark';
 import type { LayerData } from '../types/layer';
 
-export type ActiveToolType = 'brush' | 'eraser' | 'select' | 'shape' | 'pan';
+export type ActiveToolType = 'brush' | 'eraser' | 'select' | 'shape' | 'liquify' | 'pan';
 
 export interface ProjectStateListeners {
   onActiveCanvasChanged?: (canvas: SpatialCanvasData) => void;
