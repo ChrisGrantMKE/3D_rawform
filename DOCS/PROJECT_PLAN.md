@@ -80,46 +80,52 @@ We draw from the strengths of two leading apps while avoiding their limitations:
 
 ## Architecture & Tech Stack
 
-The core architecture is a **Web-First 3D Hybrid** — a WebGL engine running at 60–120 FPS that packages identically for desktop and mobile.
+The core architecture is a **Web-First 3D Hybrid** — a WebGPU engine (with WebGL2 fallback) running at 60–120 FPS that packages identically for desktop and mobile.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Input Layer                               │
-│  W3C Pointer Events: Pen Pressure/Tilt, Multi-touch         │
+│                      Input Layer                            │
+│  Pointer Events + Web Ink API: Pen Pressure/Tilt            │
+│  getCoalescedEvents · getPredictedEvents · Multi-touch      │
 │  Palm Rejection · Eraser Tip · Simultaneous Pen+Touch       │
 └────────────────────────┬────────────────────────────────────┘
                          │
 ┌────────────────────────▼────────────────────────────────────┐
-│               Core Engine — Three.js / WebGL 2               │
-│                                                              │
+│          Core Engine — Three.js / WebGPU (TSL)              │
+│                                                             │
 │  ┌──────────────┐ ┌──────────────┐ ┌─────────────────────┐  │
 │  │ Stroke Engine │ │ Canvas/Guide │ │ Camera & Animation  │  │
 │  │               │ │ System       │ │                     │  │
-│  │ • MeshLine    │ │ • Flat Planes│ │ • Orbit / Pan       │  │
-│  │ • Ribbon Mesh │ │ • Primitives │ │ • SLERP Keyframes   │  │
-│  │ • Pressure    │ │ • Projection │ │ • CatmullRom Paths  │  │
-│  │ • Smoothing   │ │ • Per-canvas │ │ • Flythrough Tours  │  │
-│  │               │ │   Layers     │ │                     │  │
+│  │ • Makio       │ │ • Flat Planes│ │ • Orbit / Pan       │  │
+│  │   MeshLine    │ │ • Primitives │ │ • SLERP Keyframes   │  │
+│  │ • TSL Compute │ │ • Projection │ │ • CatmullRom Paths  │  │
+│  │ • Pressure    │ │ • Per-canvas │ │ • Flythrough Tours  │  │
+│  │ • Smoothing   │ │   Layers     │ │                     │  │
 │  └──────────────┘ └──────────────┘ └─────────────────────┘  │
-│                                                              │
+│                                                             │
 │  ┌──────────────┐ ┌──────────────┐ ┌─────────────────────┐  │
 │  │ Editing Tools │ │ Rendering FX │ │ Storage & Export     │  │
 │  │               │ │              │ │                     │  │
-│  │ • Liquify     │ │ • Lighting   │ │ • IndexedDB/Dexie  │  │
-│  │ • Mirror      │ │ • Shadows    │ │ • .rawform JSON    │  │
-│  │ • Selection   │ │ • Depth-fade │ │ • glTF / OBJ       │  │
-│  │ • Transform   │ │ • Toon shade │ │ • PNG / MP4        │  │
+│  │ • Liquify     │ │ • Lighting   │ │ • OPFS (binary)    │  │
+│  │ • Mirror      │ │ • Shadows    │ │ • Dexie (metadata) │  │
+│  │ • Selection   │ │ • Depth-fade │ │ • .rawform (zip)   │  │
+│  │ • Transform   │ │ • Toon shade │ │ • glTF / OBJ / MP4 │  │
 │  └──────────────┘ └──────────────┘ └─────────────────────┘  │
 └────────────────────────┬────────────────────────────────────┘
                          │
           ┌──────────────┴──────────────┐
           │                             │
-┌─────────▼──────────┐     ┌───────────▼──────────┐
-│ Surface Pro Target  │     │ Android Target        │
-│ PWA + Service Worker│     │ Capacitor → APK       │
-│ Offline-first       │     │ WebView optimized     │
-└────────────────────┘     └──────────────────────┘
+┌─────────▼──────────┐    ┌────────────▼─────────────────┐
+│ Surface Pro Target  │    │ Android Target               │
+│ PWA + Service Worker│    │ Capacitor → APK              │
+│ WebGPU · Offline    │    │ WebGL2 fallback (WebView)    │
+└────────────────────┘    └──────────────────────────────┘
 ```
+
+> **Note:** Android System WebView does not yet universally support WebGPU.
+> Capacitor APKs will fall back to WebGL2 via TSL auto-compilation on most
+> Android devices. All TSL shaders must be tested under both codepaths.
+> Use `@capawesome/capacitor-system-webview` for runtime version detection.
 
 ### Core Technologies
 
@@ -267,15 +273,13 @@ WebGPURenderer (Fallback to WebGL2 if unsupported)
 ```
 
 **Key implementation details:**
+- **Makio MeshLine:** Use [Makio MeshLine](https://meshline.makio.io/) — a TSL-powered line rendering library built for `WebGPURenderer` with automatic WebGL2 fallback. Supports instancing, GPU-driven positions, and pressure-responsive width via node hooks. The legacy `THREE.MeshLine` is NOT compatible with WebGPU.
 - **TSL (Three Shader Language):** Write shaders once. They compile to WGSL (WebGPU) and GLSL (WebGL2 fallback).
 - **Compute Shaders:** Move all heavy lifting for stroke extrusion to the GPU.
-- **Draw call budget:** Target < 100 draw calls per frame. Batch completed strokes on the same canvas into merged geometry periodically.
-
-**Key implementation details:**
 - **Point sampling:** Pointer events fire at variable rates. We resample to uniform arc-length spacing (every ~2px screen distance) to prevent bunching.
 - **Smoothing:** Catmull-Rom interpolation with configurable tension — lower tension for loose sketching, higher for architectural lines.
-- **Mesh update strategy:** During active drawing, update only the last few segments of the `BufferGeometry`. Once the stroke is completed, freeze the geometry and mark it as static (`geometry.attributes.position.needsUpdate = false`).
-- **Draw call budget:** Target < 100 draw calls per frame. Batch completed strokes on the same canvas into merged geometry periodically.
+- **Mesh update strategy:** During active drawing, update only the last few segments of the `BufferGeometry`. Once the stroke is completed, freeze the geometry and mark it as static.
+- **Draw call budget:** Target < 100 draw calls per frame. Batch completed strokes per-canvas into merged geometry periodically.
 
 ### Input System Architecture
 
@@ -328,10 +332,12 @@ WebGPURenderer (Fallback to WebGL2 if unsupported)
 ```
 
 **Key implementation details:**
-- **Web Ink API:** Use as a progressive enhancement to bypass the main thread for zero-latency ink trails.
+- **Web Ink API:** Use as a progressive enhancement to bypass the main thread for zero-latency ink trails on Chromium browsers. Falls back gracefully when unsupported.
+- **`getCoalescedEvents()`:** Retrieve all intermediate stylus samples between `pointermove` events. Without this, fast drawing produces jagged lines because the browser coalesces high-frequency hardware samples into a single event.
+- **`getPredictedEvents()`:** Retrieve browser-estimated future stylus positions based on velocity/trajectory. Use for speculative rendering to further reduce perceived pen-to-ink latency.
 - Set `touch-action: none` on the canvas element to prevent browser gesture hijacking.
 - Track all active pointers in a `Map<pointerId, PointerState>` for simultaneous handling.
-- Palm rejection uses a 3-layer filter: (1) suppress all touch while pen is active, (2) reject contacts with `event.width > threshold`, (3) temporal filter.
+- Palm rejection uses a 3-layer filter: (1) suppress all touch while pen is active, (2) reject contacts with `event.width > threshold`, (3) temporal filter — ignore touches within 100ms of last pen event.
 - Do **not** use `setPointerCapture()` broadly — it blocks other simultaneous inputs.
 
 ### Canvas Projection System
@@ -418,15 +424,23 @@ function transitionTo(target: CameraBookmark) {
 
 **Key implementation details:**
 - **OPFS Performance:** Access OPFS inside a Web Worker using `FileSystemSyncAccessHandle` for synchronous, 15x–30x faster reads/writes.
-- **Never store binary in Dexie.** Dexie only holds the file paths/IDs pointing to the OPFS blobs.
-
-**Key implementation details:**
-- **Never index binary data.** Stroke vertex `Float32Array` data is stored but not indexed — only `id`, `layerId`, and `timestamp` are indexed.
-- **Granular records.** Each stroke is its own record. Adding a stroke = one `put()` call, not a full project re-write.
-- **Bulk operations.** Use `bulkAdd()` and `bulkPut()` when loading/saving many strokes at once.
-- **Debounced auto-save.** Save metadata every 30 seconds; save new strokes immediately on `pointerup`.
+- **Never store binary in Dexie.** Dexie only holds metadata and file paths/IDs pointing to OPFS blobs. Only `id`, `layerId`, and `timestamp` are indexed.
+- **Granular records.** Each stroke is its own OPFS file. Adding a stroke = one file write, not a full project re-write.
+- **Debounced auto-save.** Save metadata every 30 seconds; save new strokes to OPFS immediately on `pointerup`.
 - **Storage persistence.** Call `navigator.storage.persist()` on first launch to prevent browser eviction.
-- **Export to `.rawform`** serializes the entire Dexie database to a single JSON file (vertex data as base64-encoded `Float32Array` for portability). Import reverses the process.
+- **`.rawform` file format:** A zip archive for portability:
+
+```
+project.rawform (zip archive)
+├── project.json          # Metadata (canvases, layers, bookmarks, settings)
+├── strokes/
+│   ├── stroke_001.bin    # Float32Array binary (position, pressure, tilt)
+│   ├── stroke_002.bin
+│   └── ...
+└── assets/
+    ├── ref_image_001.png # Reference images (Phase 2+)
+    └── ...
+```
 
 ### Performance Strategy
 
@@ -438,10 +452,11 @@ Targeting **60 FPS minimum** on Surface Pro, **30+ FPS** on mid-range Android de
 | **Active stroke** | Update only the tail of the active stroke geometry — don't rebuild the entire mesh each frame. |
 | **Memory** | Aggressively `.dispose()` geometries, materials, textures when canvases are deleted. |
 | **Textures** | Keep texture sizes ≤ 2048×2048 for Android compatibility. |
+| **Canvas latency** | Set `desynchronized: true` on the canvas context to bypass the OS compositor — reduces latency by one frame. |
 | **Bundle size** | Vite code-splitting — lazy-load export modules, effects, and non-critical UI. |
 | **Service worker** | Workbox precaches critical assets (Three.js, shaders, fonts). App works fully offline. |
-| **Monitoring** | Include `stats.js` in dev builds. Use Spector.js for WebGL debugging. |
-| **Android WebView** | Profile with Android Studio Profiler. Avoid heavy CSS box-shadows that compete for GPU. |
+| **Monitoring** | Include `stats.js` in dev builds. Use WebGPU timestamp queries for render pass profiling. |
+| **Android WebView** | Profile with Android Studio Profiler. Verify WebView version supports OPFS. Fall back to WebGL2 gracefully. |
 
 ---
 
@@ -465,7 +480,7 @@ Targeting **60 FPS minimum** on Surface Pro, **30+ FPS** on mid-range Android de
 │   │
 │   ├── engine/
 │   │   ├── SceneManager.ts          # Three.js scene, camera, lights, render loop
-│   │   ├── StrokeRenderer.ts        # MeshLine / ribbon mesh stroke generation
+│   │   ├── StrokeRenderer.ts        # Makio MeshLine / TSL compute stroke generation
 │   │   ├── CurveSmoothing.ts        # Catmull-Rom point interpolation
 │   │   ├── SpatialCanvas.ts         # 2D canvas plane in 3D space
 │   │   ├── CanvasProjection.ts      # Parallel & hinge projection tools
@@ -475,9 +490,10 @@ Targeting **60 FPS minimum** on Surface Pro, **30+ FPS** on mid-range Android de
 │   │
 │   ├── input/
 │   │   ├── InputManager.ts          # Pointer event routing state machine
-│   │   ├── PenHandler.ts            # Pressure, tilt, eraser detection
+│   │   ├── PenHandler.ts            # Pressure, tilt, eraser, coalesced/predicted events
 │   │   ├── TouchHandler.ts          # Multi-touch gesture recognition
-│   │   └── PalmRejection.ts         # Contact-area + temporal filtering
+│   │   ├── PalmRejection.ts         # Contact-area + temporal filtering
+│   │   └── InkPresenter.ts          # Web Ink API low-latency trail (progressive)
 │   │
 │   ├── tools/
 │   │   ├── BrushTool.ts             # Active drawing tool with brush profiles
@@ -487,10 +503,14 @@ Targeting **60 FPS minimum** on Surface Pro, **30+ FPS** on mid-range Android de
 │   │   ├── MirrorTool.ts            # Multi-axis symmetry drawing
 │   │   └── ShapeTool.ts             # Lines, circles, ellipses
 │   │
+│   ├── workers/
+│   │   └── StorageWorker.ts         # OPFS FileSystemSyncAccessHandle I/O
+│   │
 │   ├── state/
 │   │   ├── ProjectState.ts          # Central state management
 │   │   ├── UndoRedoManager.ts       # Command pattern undo/redo stack
-│   │   └── StorageManager.ts        # Dexie.js IndexedDB persistence
+│   │   ├── MetadataStore.ts         # Dexie.js metadata-only persistence
+│   │   └── BinaryStore.ts           # OPFS binary I/O via StorageWorker
 │   │
 │   ├── ui/
 │   │   ├── Toolbar.ts               # Floating touch-friendly tool palette
@@ -505,12 +525,11 @@ Targeting **60 FPS minimum** on Surface Pro, **30+ FPS** on mid-range Android de
 │   │   ├── GLTFExporter.ts          # Three.js GLTFExporter wrapper
 │   │   ├── OBJExporter.ts           # OBJ format export
 │   │   ├── ImageExporter.ts         # PNG screenshot
-│   │   └── VideoExporter.ts         # MP4 flythrough recording
+│   │   └── VideoExporter.ts         # WebCodecs + mp4-muxer flythrough recording
 │   │
 │   ├── shaders/
-│   │   ├── ribbon.vert              # Custom ribbon vertex shader
-│   │   ├── ribbon.frag              # Custom ribbon fragment shader
-│   │   └── depthFade.frag           # Angle-dependent opacity shader
+│   │   ├── ribbonNode.ts            # TSL node for ribbon stroke rendering
+│   │   └── depthFadeNode.ts         # TSL node for angle-dependent opacity
 │   │
 │   └── types/
 │       ├── stroke.ts                # Stroke, BrushProfile, Point types
@@ -518,7 +537,7 @@ Targeting **60 FPS minimum** on Surface Pro, **30+ FPS** on mid-range Android de
 │       ├── bookmark.ts              # CameraBookmark type
 │       └── project.ts               # Top-level project type
 │
-├── android/                         # Capacitor Android wrapper (Phase 2)
+├── android/                         # Capacitor Android wrapper (Phase 3)
 │   └── app/
 │
 └── .github/
@@ -535,11 +554,11 @@ Targeting **60 FPS minimum** on Surface Pro, **30+ FPS** on mid-range Android de
 
 | Component | Deliverables |
 |---|---|
-| **Stroke Engine** | MeshLine-based pressure strokes, Catmull-Rom smoothing, eraser, undo/redo |
+| **Stroke Engine** | Makio MeshLine pressure strokes, Catmull-Rom smoothing, eraser, undo/redo |
 | **Canvas System** | Flat planes (XY, XZ, YZ, custom), visual grid, basic canvas add/remove/transform |
-| **Input System** | Pen/touch separation, palm rejection, 2-finger orbit/pan/zoom |
+| **Input System** | Pen/touch separation, palm rejection, coalesced/predicted events, 2-finger orbit/pan/zoom, Web Ink API |
 | **Camera** | OrbitControls customized for touch, snap-to-axis views |
-| **Storage** | Dexie.js auto-save, `.rawform` save/load, IndexedDB persistence |
+| **Storage** | OPFS binary store + Dexie.js metadata, `.rawform` zip save/load |
 | **Export** | glTF export, PNG screenshot |
 | **UI** | Floating toolbar, color picker, basic canvas list |
 
@@ -621,10 +640,12 @@ Targeting **60 FPS minimum** on Surface Pro, **30+ FPS** on mid-range Android de
 
 | # | Question | Impact | Recommendation |
 |---|---|---|---|
-| 1 | **OPFS Implementation:** OPFS requires Web Workers for max performance. Start in Phase 1? | Architecture complexity vs perf | **Resolved:** Yes. Building for OPFS + Web Workers in Phase 1 prevents a massive refactor in Phase 3. |
-| 2 | **WebGPU/TSL:** Should we start with TSL from day one? | Learning curve | **Resolved:** Yes. TSL auto-compiles to WebGL2 for fallback, meaning we get WebGPU compute shaders where supported with zero extra effort for legacy devices. |
-| 3 | **Project file format:** JSON with OPFS blobs? | Portability | Use `.rawform` as a zip archive containing the `project.json` (metadata) and the `.bin` files (strokes). |
-| 4 | **PWA vs. Electron for Windows:** PWA has limited filesystem access; Electron adds ~100MB | Distribution size | PWA — use File System Access API for native save/open dialogs; avoids Electron bloat. |
-| 5 | **Layer system in Phase 1 or Phase 2?** | MVP scope | Phase 2 — single implicit layer per canvas is sufficient for MVP. |
-| 6 | **GSAP licensing:** GSAP is free for open-source | Legal / dependency | GSAP free tier covers our use case; evaluate anime.js as lighter alternative. |
-| 7 | **Custom brush editor:** Allow users to create their own brush profiles? | Feature scope, community value | Defer to Phase 4; use preset brush profiles until then |
+| 1 | **OPFS Implementation:** OPFS requires Web Workers for max performance. Start in Phase 1? | Architecture complexity vs perf | **Resolved:** Yes. Building for OPFS + Web Workers in Phase 1 prevents a massive refactor later. |
+| 2 | **WebGPU/TSL:** Should we start with TSL from day one? | Learning curve | **Resolved:** Yes. TSL auto-compiles to WebGL2 for fallback. Android WebView gets WebGL2; desktop PWA gets full WebGPU compute shaders. |
+| 3 | **Project file format:** JSON with OPFS blobs? | Portability | **Resolved:** Use `.rawform` as a zip archive containing `project.json` (metadata) + `strokes/*.bin` (binary) + `assets/*` (images). |
+| 4 | **PWA vs. Electron for Windows:** PWA has limited filesystem access; Electron adds ~100MB | Distribution size | **Resolved:** PWA — use File System Access API for native save/open dialogs; avoids Electron bloat. |
+| 5 | **Layer system in Phase 1 or Phase 2?** | MVP scope | **Resolved:** Phase 2 — single implicit layer per canvas is sufficient for MVP. |
+| 6 | **GSAP licensing:** Is GSAP safe for an MIT-licensed project? | Legal / dependency | **Resolved:** GSAP is 100% free since Webflow acquisition (April 2025) but is NOT open-source — uses proprietary "Standard No Charge License." Our project is MIT except for the GSAP dependency. No conflict for sketching apps; restriction only applies to tools competing with Webflow's animation builder. |
+| 7 | **MeshLine compatibility:** Does THREE.MeshLine work with WebGPURenderer? | Critical / rendering | **Resolved:** No. The legacy MeshLine library is WebGL-only. Use **Makio MeshLine** (`makio-meshline`) — a TSL-powered replacement built for WebGPURenderer with WebGL2 fallback. |
+| 8 | **Video export technology:** MediaRecorder vs WebCodecs? | Export quality | **Resolved:** Use **WebCodecs API + mp4-muxer** — hardware-accelerated H.264 encoding, true MP4 output, faster-than-realtime export in a Web Worker. MediaRecorder only produces WebM. |
+| 9 | **Custom brush editor:** Allow users to create their own brush profiles? | Feature scope, community value | Defer to Phase 4; use preset brush profiles until then. |

@@ -12,7 +12,7 @@ Feather 3D (3D guide surfaces, pressure brushes, liquify, live mirror).
 ## Tech Stack
 - **Runtime:** TypeScript (strict mode), Vite
 - **3D Engine:** Three.js (WebGPURenderer), TSL (Three Shader Language) compute shaders
-- **Stroke Rendering:** THREE.MeshLine → WebGPU Compute Shader ribbon mesh
+- **Stroke Rendering:** Makio MeshLine (TSL) → WebGPU Compute Shader ribbon mesh
 - **Curve Smoothing:** Catmull-Rom splines
 - **Input:** W3C Pointer Events API + Web Ink API (low-latency drawing)
 - **Animation:** GSAP + THREE.Quaternion.slerp
@@ -36,10 +36,11 @@ Feather 3D (3D guide surfaces, pressure brushes, liquify, live mirror).
 - **engine/** — Pure Three.js logic. No DOM manipulation. No UI concerns.
 - **input/** — Pointer event handling only. No rendering logic.
 - **tools/** — Tool implementations. Each tool extends a base Tool class.
-- **state/** — Central state management. Only StorageManager touches IndexedDB.
+- **state/** — Central state management. Only MetadataStore touches Dexie.js. Only BinaryStore touches OPFS.
+- **workers/** — Web Worker scripts only. OPFS sync access handles live here.
 - **ui/** — DOM-based UI components. No Three.js imports.
 - **export/** — File format serialization. No side effects.
-- **shaders/** — TSL (Three Shader Language) files only. No raw GLSL.
+- **shaders/** — TSL (Three Shader Language) node files only. No raw GLSL/WGSL.
 - **types/** — TypeScript type definitions only. No runtime code.
 
 ## Performance Constraints
@@ -58,6 +59,7 @@ Feather 3D (3D guide surfaces, pressure brushes, liquify, live mirror).
 - Do NOT use `setPointerCapture()` broadly — it blocks simultaneous pen+touch inputs.
 - Do NOT use `requestAnimationFrame` manually — use the Three.js render loop.
 - Do NOT store binary stroke data in IndexedDB — use OPFS instead.
+- Do NOT use the legacy `THREE.MeshLine` library — it is not compatible with WebGPU. Use `makio-meshline`.
 - Do NOT add npm packages without checking bundle size impact first.
 
 ## Key References
