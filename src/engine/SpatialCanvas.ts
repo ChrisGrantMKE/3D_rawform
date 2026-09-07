@@ -59,12 +59,14 @@ export class SpatialCanvas {
   }
 
   /**
-   * Raycasts a 3D ray against this spatial canvas plane within its boundaries.
+   * Raycasts a 3D ray against this spatial canvas plane.
+   * By default, permits unbounded spatial sketching across the entire plane.
    *
    * @param ray - Three.js Ray in world coordinates
-   * @returns Intersection point in world coordinates or null if outside bounds
+   * @param bounded - Whether to restrict raycast strictly to current visual grid
+   * @returns Intersection point in world coordinates or null
    */
-  public intersectRay(ray: Ray): Vector3 | null {
+  public intersectRay(ray: Ray, bounded: boolean = false): Vector3 | null {
     if (!this.isVisible || this.isLocked) {
       return null;
     }
@@ -75,15 +77,67 @@ export class SpatialCanvas {
       return null;
     }
 
-    const localPoint = this.projectWorldToLocal(intersection);
-    const halfW = this.width / 2;
-    const halfH = this.height / 2;
+    if (bounded) {
+      const localPoint = this.projectWorldToLocal(intersection);
+      const halfW = this.width / 2;
+      const halfH = this.height / 2;
 
-    if (Math.abs(localPoint.x) <= halfW && Math.abs(localPoint.y) <= halfH) {
-      return intersection;
+      if (Math.abs(localPoint.x) > halfW || Math.abs(localPoint.y) > halfH) {
+        return null;
+      }
     }
 
-    return null;
+    return intersection;
+  }
+
+  /**
+   * Dynamically expands canvas grid bounds to encapsulate newly drawn strokes.
+   */
+  public expandBoundsToFit(points: Vector3[]): void {
+    let maxLx = this.width / 2;
+    let maxLy = this.height / 2;
+    let needsExpansion = false;
+
+    for (const p of points) {
+      const local = this.projectWorldToLocal(p);
+      if (Math.abs(local.x) > maxLx) {
+        maxLx = Math.abs(local.x) * 1.15;
+        needsExpansion = true;
+      }
+      if (Math.abs(local.y) > maxLy) {
+        maxLy = Math.abs(local.y) * 1.15;
+        needsExpansion = true;
+      }
+    }
+
+    if (needsExpansion) {
+      this.width = Math.ceil(maxLx * 2);
+      this.height = Math.ceil(maxLy * 2);
+      this.rebuildOutline();
+    }
+  }
+
+  /**
+   * Rebuilds visual outline and hit plane when dimensions are expanded.
+   */
+  public rebuildOutline(): void {
+    this.group.remove(this.outlineMesh);
+    this.outlineMesh.geometry.dispose();
+    this.outlineMesh = this.createOutline(this.width, this.height);
+    this.group.add(this.outlineMesh);
+
+    this.group.remove(this.hitPlaneMesh);
+    this.hitPlaneMesh.geometry.dispose();
+    this.hitPlaneMesh = this.createHitPlane(this.width, this.height);
+    this.group.add(this.hitPlaneMesh);
+  }
+
+  /**
+   * Highlights or dims the canvas visual frame depending on active state.
+   */
+  public setActive(isActive: boolean): void {
+    (this.outlineMesh.material as LineBasicMaterial).color.set(isActive ? 0x818cf8 : 0x475569);
+    (this.outlineMesh.material as LineBasicMaterial).opacity = isActive ? 0.45 : 0.18;
   }
 
   /**

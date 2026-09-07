@@ -174,6 +174,10 @@ export class BrushTool extends Tool {
     const canvasId = activeCanvas ? activeCanvas.id : 'spatial_guide';
     const smoothedPoints = CurveSmoothing.smooth(this.collectedPoints, 0.04, 0.5);
 
+    if (activeCanvas) {
+      activeCanvas.expandBoundsToFit(smoothedPoints.map((p) => new Vector3(p.x, p.y, p.z)));
+    }
+
     const primaryStrokeData: StrokeData = {
       id: strokeId,
       canvasId,

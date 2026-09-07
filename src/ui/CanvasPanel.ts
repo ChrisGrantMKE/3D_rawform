@@ -3,6 +3,7 @@ import type { SpatialCanvasData, SpatialPlaneType } from '../types/canvas';
 export interface CanvasPanelCallbacks {
   onSelectCanvas: (canvasId: string) => void;
   onCreateCanvas: (name: string, planeType: SpatialPlaneType) => void;
+  onCreateCanvasFromView?: () => void;
   onCreateParallel?: (distance: number) => void;
   onCreateHinge?: (edge: 'top' | 'bottom' | 'left' | 'right', angleDeg: number) => void;
   onSnapToCanvas: (canvasId: string) => void;
@@ -66,6 +67,7 @@ export class CanvasPanel {
         <span>Spatial Canvases</span>
         <button id="close-canvas-panel" class="small-btn">✕</button>
       </div>
+      <button id="add-view-canvas" class="action-pill" style="width: 100%; justify-content: center; font-size: 11px; height: 32px; background: var(--bg-active); border-color: var(--border-highlight); margin-top: 6px; margin-bottom: 6px;">➕ Canvas From Current View (C)</button>
       <div class="canvas-list" id="canvas-items-container"></div>
       <div class="panel-section-title" style="margin-top: 8px;">Standard Planes</div>
       <div style="display: flex; gap: 6px;">
@@ -87,6 +89,10 @@ export class CanvasPanel {
   private bindEvents(): void {
     this.rootElement.querySelector('#close-canvas-panel')?.addEventListener('click', () => {
       this.hide();
+    });
+
+    this.rootElement.querySelector('#add-view-canvas')?.addEventListener('click', () => {
+      this.callbacks.onCreateCanvasFromView?.();
     });
 
     this.rootElement.querySelector('#add-xy-canvas')?.addEventListener('click', () => {

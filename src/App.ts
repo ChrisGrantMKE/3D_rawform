@@ -183,6 +183,7 @@ export class App {
     this.canvasPanel = new CanvasPanel(this.uiLayer, {
       onSelectCanvas: (id) => this.handleSelectCanvas(id),
       onCreateCanvas: (name, type) => this.handleCreateCanvas(name, type),
+      onCreateCanvasFromView: () => this.handleCreateCanvasFromView(),
       onCreateParallel: (dist) => this.handleCreateParallel(dist),
       onCreateHinge: (edge, deg) => this.handleCreateHinge(edge, deg),
       onSnapToCanvas: (id) => this.handleSnapCanvas(id),
@@ -329,11 +330,16 @@ export class App {
         <span class="app-badge">WebGPU</span>
       </div>
       <div class="top-actions ui-interactive">
+        <button id="btn-add-view-canvas" class="action-pill" style="background: var(--bg-active); border-color: var(--border-highlight);" title="Drop a drawing canvas facing current camera view (Hotkey: C)">➕ Canvas From View (C)</button>
         <button id="btn-export-png" class="action-pill">📷 Snapshot</button>
         <button id="btn-export-glb" class="action-pill">📦 Export 3D</button>
         <button id="btn-export-mp4" class="action-pill">🎬 Export MP4</button>
       </div>
     `;
+
+    header.querySelector('#btn-add-view-canvas')?.addEventListener('click', () => {
+      this.handleCreateCanvasFromView();
+    });
 
     header.querySelector('#btn-export-png')?.addEventListener('click', () => {
       ImageExporter.downloadSnapshot(this.sceneManager.renderer.domElement);
@@ -375,6 +381,13 @@ export class App {
       }
     });
 
+    window.addEventListener('keydown', (e) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'c' || e.key === 'C') {
+        this.handleCreateCanvasFromView();
+      }
+    });
+
     this.uiLayer.appendChild(header);
 
     const status = document.createElement('div');
@@ -385,10 +398,35 @@ export class App {
 
   private handleSelectCanvas(id: string): void {
     this.projectState.setActiveCanvas(id);
+    for (const [cId, spatial] of this.spatialCanvases) {
+      spatial.setActive(cId === id);
+    }
     const canvas = this.projectState.getActiveCanvas();
     const label = this.uiLayer.querySelector('#active-canvas-label');
     if (label && canvas) label.textContent = canvas.name;
     this.snapToActiveCanvas();
+  }
+
+  private handleCreateCanvasFromView(): void {
+    const cam = this.sceneManager.camera;
+    const target = this.sceneManager.cameraController.getTarget();
+    const count = this.spatialCanvases.size + 1;
+
+    const pos: [number, number, number] = [target.x, target.y, target.z];
+    const rot: [number, number, number, number] = [
+      cam.quaternion.x,
+      cam.quaternion.y,
+      cam.quaternion.z,
+      cam.quaternion.w,
+    ];
+
+    const data = this.projectState.addCanvas(
+      `View Canvas ${count}`,
+      'CUSTOM',
+      pos,
+      rot
+    );
+    this.registerSpatialCanvas(data);
   }
 
   private handleCreateCanvas(name: string, planeType: SpatialPlaneType): void {
