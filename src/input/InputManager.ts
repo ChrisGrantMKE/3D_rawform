@@ -113,14 +113,14 @@ export class InputManager {
         this.touchHandler.handlePointerDown(e);
       }
     } else {
-      // Mouse interaction
-      if (e.button === 0 && !e.altKey) {
+      // Mouse interaction: Left click draws, Right/Alt+Left orbits, Middle/Shift+Left pans
+      if (e.button === 0 && !e.altKey && !e.shiftKey) {
         this.penHandler.handlePointerDown(e);
       } else if (e.button === 2 || (e.button === 0 && e.altKey)) {
         this.isMouseOrbiting = true;
         this.lastMouseX = e.clientX;
         this.lastMouseY = e.clientY;
-      } else if (e.button === 1) {
+      } else if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
         this.isMousePanning = true;
         this.lastMouseX = e.clientX;
         this.lastMouseY = e.clientY;
@@ -138,7 +138,7 @@ export class InputManager {
         this.touchHandler.handlePointerMove(e);
       }
     } else {
-      if (e.buttons === 1 && !e.altKey && !this.isMouseOrbiting) {
+      if (e.buttons === 1 && !e.altKey && !e.shiftKey && !this.isMouseOrbiting && !this.isMousePanning) {
         this.penHandler.handlePointerMove(e);
       } else if (this.isMouseOrbiting) {
         const dx = e.clientX - this.lastMouseX;
@@ -165,7 +165,9 @@ export class InputManager {
     } else if (e.pointerType === 'touch') {
       this.touchHandler.handlePointerUp(e);
     } else {
-      this.penHandler.handlePointerUp(e);
+      if (!this.isMouseOrbiting && !this.isMousePanning) {
+        this.penHandler.handlePointerUp(e);
+      }
       this.isMouseOrbiting = false;
       this.isMousePanning = false;
     }
