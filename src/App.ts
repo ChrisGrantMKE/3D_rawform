@@ -23,6 +23,7 @@ import { ImageExporter } from './export/ImageExporter';
 import { GLTFExporterWrapper } from './export/GLTFExporterWrapper';
 import { VideoExporter } from './export/VideoExporter';
 import { AssetImporter } from './export/AssetImporter';
+import { PlanePreview } from './engine/PlanePreview';
 import type { SpatialPlaneType, SpatialCanvasData } from './types/canvas';
 import type { CameraBookmark } from './types/bookmark';
 
@@ -36,6 +37,7 @@ export class App {
   private sceneManager!: SceneManager;
   private strokeRenderer!: StrokeRenderer;
   private guideSurface!: GuideSurface;
+  private planePreview!: PlanePreview;
   private cameraAnimator!: CameraAnimator;
   private inputManager!: InputManager;
   private projectState!: ProjectState;
@@ -56,6 +58,10 @@ export class App {
   private guidePanel!: GuidePanel;
   private bookmarkTimeline!: BookmarkTimeline;
   private gltfExporter: GLTFExporterWrapper = new GLTFExporterWrapper();
+
+  private isHoldingC: boolean = false;
+  private depthHud!: HTMLElement;
+  private depthHudValue!: HTMLElement;
 
   /**
    * Initializes App DOM references.
@@ -78,6 +84,9 @@ export class App {
     this.guideSurface = new GuideSurface();
     this.sceneManager.scene.add(this.guideSurface.getObject());
 
+    this.planePreview = new PlanePreview();
+    this.sceneManager.scene.add(this.planePreview.getObject());
+
     this.cameraAnimator = new CameraAnimator(this.sceneManager.camera, this.sceneManager.cameraController);
     this.projectState = new ProjectState();
     this.undoManager = new UndoRedoManager();
@@ -93,6 +102,8 @@ export class App {
     const project = this.projectState.getProject();
     for (const canvasData of project.canvases) {
       const spatial = new SpatialCanvas(canvasData);
+      // Keep only active canvas grid visible initially; hide others to eliminate clutter
+      spatial.setGridVisible(canvasData.id === project.activeCanvasId);
       this.spatialCanvases.set(canvasData.id, spatial);
       this.sceneManager.scene.add(spatial.getObject());
     }
@@ -153,6 +164,11 @@ export class App {
   private setupInput(): void {
     this.inputManager.setListeners({
       onPenDown: (data) => {
+        // Dismiss the canvas grid on the very first stroke so grids do not clutter 3D space
+        const active = this.getActiveSpatialCanvas();
+        if (active && active.getGridVisible()) {
+          active.setGridVisible(false);
+        }
         const tool = data.isEraser ? this.eraserTool : this.currentTool;
         tool.onPointerDown(data.point, data.samples, data.rawEvent);
       },
@@ -167,6 +183,15 @@ export class App {
       onCameraOrbit: (dTheta, dPhi) => this.sceneManager.cameraController.orbit(dTheta, dPhi),
       onCameraPan: (dx, dy) => this.sceneManager.cameraController.pan(dx, dy),
       onCameraZoom: (factor) => this.sceneManager.cameraController.zoom(factor),
+      onWheelScroll: (deltaY) => {
+        if (this.planePreview.isActive()) {
+          const step = deltaY > 0 ? 0.35 : -0.35;
+          this.planePreview.adjustDepth(step, this.sceneManager.camera);
+          this.updateDepthHud();
+          return true;
+        }
+        return false;
+      },
     });
   }
 
@@ -381,10 +406,41 @@ export class App {
       }
     });
 
+    // Floating depth slice HUD
+    this.depthHud = document.createElement('div');
+    this.depthHud.className = 'glass-panel ui-interactive';
+    this.depthHud.style.cssText =
+      'display: none; position: absolute; top: 76px; left: 50%; transform: translateX(-50%); padding: 8px 18px; font-size: 13px; font-weight: 500; color: var(--accent-secondary); gap: 10px; align-items: center; z-index: 100; border-color: var(--border-highlight);';
+    this.depthHud.innerHTML = `<span>📐 New Plane Depth: <b id="depth-hud-value" style="color: #fff; font-family: var(--font-mono);">+0.0m</b> <span style="color: var(--text-secondary); font-size: 11px;">(Scroll/Wheel to slice depth, Release [C] to place)</span></span>`;
+    this.depthHudValue = this.depthHud.querySelector('#depth-hud-value') as HTMLElement;
+    this.uiLayer.appendChild(this.depthHud);
+
+    const btnAddView = header.querySelector('#btn-add-view-canvas') as HTMLButtonElement;
+    btnAddView.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      this.startPlanePreview();
+    });
+
+    window.addEventListener('pointerup', () => {
+      if (this.isHoldingC) {
+        this.commitPlanePreview();
+      }
+    });
+
     window.addEventListener('keydown', (e) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if ((e.key === 'c' || e.key === 'C') && !e.repeat) {
+        this.startPlanePreview();
+      }
+      if (e.key === 'Escape' && this.planePreview.isActive()) {
+        this.cancelPlanePreview();
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === 'c' || e.key === 'C') {
-        this.handleCreateCanvasFromView();
+        this.commitPlanePreview();
       }
     });
 
@@ -394,6 +450,50 @@ export class App {
     status.className = 'status-pill glass-panel ui-interactive';
     status.innerHTML = `<span class="status-dot"></span><span>Active Canvas: <b id="active-canvas-label">Front (XY)</b></span>`;
     this.uiLayer.appendChild(status);
+  }
+
+  private startPlanePreview(): void {
+    if (this.planePreview.isActive()) return;
+    this.isHoldingC = true;
+    const cam = this.sceneManager.camera;
+    const target = this.sceneManager.cameraController.getTarget();
+    this.planePreview.start(cam, target);
+    this.depthHud.style.display = 'flex';
+    this.updateDepthHud();
+  }
+
+  private commitPlanePreview(): void {
+    if (!this.planePreview.isActive()) return;
+    const result = this.planePreview.getResult();
+    this.planePreview.stop();
+    this.depthHud.style.display = 'none';
+    this.isHoldingC = false;
+
+    const count = this.spatialCanvases.size + 1;
+    const data = this.projectState.addCanvas(
+      `View Canvas ${count}`,
+      'CUSTOM',
+      result.position,
+      result.rotation
+    );
+    this.registerSpatialCanvas(data);
+  }
+
+  private cancelPlanePreview(): void {
+    if (!this.planePreview.isActive()) return;
+    this.planePreview.stop();
+    this.depthHud.style.display = 'none';
+    this.isHoldingC = false;
+  }
+
+  private updateDepthHud(): void {
+    const depth = this.planePreview.getResult().depth;
+    this.depthHudValue.textContent = `${depth >= 0 ? '+' : ''}${depth.toFixed(1)}m`;
+  }
+
+  private getActiveSpatialCanvas(): SpatialCanvas | undefined {
+    const activeId = this.projectState.getProject().activeCanvasId;
+    return this.spatialCanvases.get(activeId);
   }
 
   private handleSelectCanvas(id: string): void {
@@ -408,25 +508,8 @@ export class App {
   }
 
   private handleCreateCanvasFromView(): void {
-    const cam = this.sceneManager.camera;
-    const target = this.sceneManager.cameraController.getTarget();
-    const count = this.spatialCanvases.size + 1;
-
-    const pos: [number, number, number] = [target.x, target.y, target.z];
-    const rot: [number, number, number, number] = [
-      cam.quaternion.x,
-      cam.quaternion.y,
-      cam.quaternion.z,
-      cam.quaternion.w,
-    ];
-
-    const data = this.projectState.addCanvas(
-      `View Canvas ${count}`,
-      'CUSTOM',
-      pos,
-      rot
-    );
-    this.registerSpatialCanvas(data);
+    this.startPlanePreview();
+    this.commitPlanePreview();
   }
 
   private handleCreateCanvas(name: string, planeType: SpatialPlaneType): void {
@@ -493,6 +576,11 @@ export class App {
     this.spatialCanvases.set(data.id, spatial);
     this.sceneManager.scene.add(spatial.getObject());
 
+    // Only allow the new canvas to display its grid temporarily; hide all older canvas grids
+    for (const [id, c] of this.spatialCanvases) {
+      c.setGridVisible(id === data.id);
+    }
+
     this.handleSelectCanvas(data.id);
     this.canvasPanel.updateCanvases(this.projectState.getProject().canvases, data.id);
   }
@@ -535,6 +623,7 @@ export class App {
     this.sceneManager.dispose();
     this.strokeRenderer.dispose();
     this.guideSurface.dispose();
+    this.planePreview.dispose();
     this.cameraAnimator.dispose();
     this.inputManager.dispose();
     this.projectState.dispose();

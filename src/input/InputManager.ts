@@ -10,6 +10,7 @@ export interface InputManagerListeners {
   onCameraOrbit: (deltaTheta: number, deltaPhi: number) => void;
   onCameraPan: (deltaX: number, deltaY: number) => void;
   onCameraZoom: (factor: number) => void;
+  onWheelScroll?: (deltaY: number) => boolean;
 }
 
 /**
@@ -175,6 +176,9 @@ export class InputManager {
 
   private onWheel = (e: WheelEvent): void => {
     e.preventDefault();
+    if (this.listeners?.onWheelScroll?.(e.deltaY)) {
+      return;
+    }
     const factor = e.deltaY > 0 ? 1.08 : 0.92;
     this.listeners?.onCameraZoom(factor);
   };

@@ -141,6 +141,20 @@ export class SpatialCanvas {
   }
 
   /**
+   * Sets visibility of the visual frame and grid lines.
+   */
+  public setGridVisible(visible: boolean): void {
+    this.outlineMesh.visible = visible;
+  }
+
+  /**
+   * Returns current visibility of the canvas grid lines.
+   */
+  public getGridVisible(): boolean {
+    return this.outlineMesh.visible;
+  }
+
+  /**
    * Transforms a world 3D position into 2D local canvas coordinates.
    *
    * @param worldPoint - 3D world coordinate
