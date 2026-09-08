@@ -15,6 +15,20 @@ export class CameraController {
   private animStartTarget: Vector3 = new Vector3();
   private animEndTarget: Vector3 = new Vector3();
   private animProgress: number = 0;
+  private changeCallbacks: Array<() => void> = [];
+
+  /**
+   * Registers a callback invoked whenever the camera position, target, or rotation changes.
+   */
+  public onChange(cb: () => void): void {
+    this.changeCallbacks.push(cb);
+  }
+
+  private notifyChange(): void {
+    for (const cb of this.changeCallbacks) {
+      cb();
+    }
+  }
 
   /**
    * Initializes the camera controller.
@@ -38,6 +52,7 @@ export class CameraController {
     this.spherical.theta -= deltaTheta;
     this.spherical.phi = Math.max(0.01, Math.min(Math.PI - 0.01, this.spherical.phi - deltaPhi));
     this.updateCameraPosition();
+    this.notifyChange();
   }
 
   /**
@@ -59,6 +74,7 @@ export class CameraController {
     const panOffset = right.multiplyScalar(-deltaX * panSpeed).add(up.multiplyScalar(deltaY * panSpeed));
     this.target.add(panOffset);
     this.camera.position.add(panOffset);
+    this.notifyChange();
   }
 
   /**
@@ -71,6 +87,7 @@ export class CameraController {
 
     this.spherical.radius = Math.max(0.5, Math.min(200, this.spherical.radius * deltaRadius));
     this.updateCameraPosition();
+    this.notifyChange();
   }
 
   /**
@@ -115,6 +132,7 @@ export class CameraController {
 
     if (!this.isAnimating) {
       this.syncSphericalFromPosition();
+      this.notifyChange();
     }
   }
 
@@ -135,6 +153,7 @@ export class CameraController {
     this.target.copy(newTarget);
     this.camera.position.add(diff);
     this.camera.lookAt(this.target);
+    this.notifyChange();
   }
 
   /**

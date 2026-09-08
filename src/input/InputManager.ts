@@ -10,7 +10,11 @@ export interface InputManagerListeners {
   onCameraOrbit: (deltaTheta: number, deltaPhi: number) => void;
   onCameraPan: (deltaX: number, deltaY: number) => void;
   onCameraZoom: (factor: number) => void;
+  onOrbitEnd?: () => void;
   onWheelScroll?: (deltaY: number) => boolean;
+  onDepthStart?: () => void;
+  onDepthAdjust?: (delta: number) => void;
+  onDepthEnd?: () => void;
 }
 
 /**
@@ -25,6 +29,7 @@ export class InputManager {
 
   private isMouseOrbiting: boolean = false;
   private isMousePanning: boolean = false;
+  private isDepthAdjusting: boolean = false;
   private lastMouseX: number = 0;
   private lastMouseY: number = 0;
 
@@ -87,6 +92,7 @@ export class InputManager {
       onOrbit: (dTheta, dPhi) => this.listeners?.onCameraOrbit(dTheta, dPhi),
       onPan: (dx, dy) => this.listeners?.onCameraPan(dx, dy),
       onZoom: (factor) => this.listeners?.onCameraZoom(factor),
+      onGestureEnd: () => this.listeners?.onOrbitEnd?.(),
     };
     this.touchHandler.setCallbacks(touchCallbacks);
   }
@@ -105,6 +111,13 @@ export class InputManager {
 
   private onPointerDown = (e: PointerEvent): void => {
     e.preventDefault();
+
+    if (e.ctrlKey) {
+      this.isDepthAdjusting = true;
+      this.lastMouseY = e.clientY;
+      this.listeners?.onDepthStart?.();
+      return;
+    }
 
     if (e.pointerType === 'pen') {
       this.palmRejection.notifyPenDown();
@@ -131,6 +144,13 @@ export class InputManager {
 
   private onPointerMove = (e: PointerEvent): void => {
     e.preventDefault();
+
+    if (this.isDepthAdjusting) {
+      const dy = e.clientY - this.lastMouseY;
+      this.lastMouseY = e.clientY;
+      this.listeners?.onDepthAdjust?.(dy);
+      return;
+    }
 
     if (e.pointerType === 'pen') {
       this.penHandler.handlePointerMove(e);
@@ -160,6 +180,12 @@ export class InputManager {
   private onPointerUp = (e: PointerEvent): void => {
     e.preventDefault();
 
+    if (this.isDepthAdjusting) {
+      this.isDepthAdjusting = false;
+      this.listeners?.onDepthEnd?.();
+      return;
+    }
+
     if (e.pointerType === 'pen') {
       this.palmRejection.notifyPenUp();
       this.penHandler.handlePointerUp(e);
@@ -169,13 +195,36 @@ export class InputManager {
       if (!this.isMouseOrbiting && !this.isMousePanning) {
         this.penHandler.handlePointerUp(e);
       }
-      this.isMouseOrbiting = false;
+      if (this.isMouseOrbiting) {
+        this.isMouseOrbiting = false;
+        this.listeners?.onOrbitEnd?.();
+      }
       this.isMousePanning = false;
     }
   };
 
+  private wheelDepthTimer: number | null = null;
+
   private onWheel = (e: WheelEvent): void => {
     e.preventDefault();
+    if (e.ctrlKey) {
+      if (!this.isDepthAdjusting) {
+        this.isDepthAdjusting = true;
+        this.listeners?.onDepthStart?.();
+      }
+      this.listeners?.onDepthAdjust?.(e.deltaY * 0.05);
+      if (this.wheelDepthTimer !== null) {
+        window.clearTimeout(this.wheelDepthTimer);
+      }
+      this.wheelDepthTimer = window.setTimeout(() => {
+        if (this.isDepthAdjusting) {
+          this.isDepthAdjusting = false;
+          this.listeners?.onDepthEnd?.();
+        }
+        this.wheelDepthTimer = null;
+      }, 700);
+      return;
+    }
     if (this.listeners?.onWheelScroll?.(e.deltaY)) {
       return;
     }

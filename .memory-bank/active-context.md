@@ -15,6 +15,10 @@
 - [x] Automated Unit Test Suite: Vitest installed, unit tests covering math, splines, canvas intersection, undo/redo commands.
 - [x] Android Capacitor Project: `android/` directory generated and synced.
 - [x] Post-Processing Effects: Depth of Field (`LR-04`) & Toon cel-shading (`LR-05`) via WebGPU TSL pipeline.
+- [x] Infinite Dot Matrix Ground & Atmospheric Horizon: Replaced boxed grid with airport-runway-style TSL dot field and vertical sky dome horizon gradient.
+- [x] Auto-Redrop View Canvas: Eliminated manual `C` key; canvas stays at focal plane and automatically re-drops on camera pivot.
+- [x] Smart Spatial Snapping: Screen-space tolerance scaled by distance with nearest-to-observer filtering and Z-depth locking.
+- [x] Depth Push/Pull: `Ctrl` + drag or scroll wheel for real-time slicing preview with translucent muting plane and HUD.
 
 ## Current Focus
 - Rethinking and refining the UI interface, navigation, ergonomics, and display to transform from the engineering draft harness to a studio-grade creative sketching workspace (inspired by Procreate, Mental Canvas, and Feather 3D).

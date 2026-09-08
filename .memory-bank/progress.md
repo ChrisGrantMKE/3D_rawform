@@ -54,3 +54,11 @@
 - **Depth of Field Post-Processing (LR-04):** WebGPU cinematic bokeh blur using Three.js TSL `DepthOfFieldNode` and depth buffer pass.
 - **Toon / Cel-Shading (LR-05):** Cel-shaded outline rendering pass using TSL `toonOutlinePass`.
 - **PostProcessPipeline:** Managed in `PostProcessPipeline.ts` and wired into `SceneManager` with UI selector (None, DoF, Toon, All).
+
+### Session 7 — Infinite Depth Perception & Smart Spatial Snapping
+- **Airport Runway Dot Matrix Environment:** Implemented procedural TSL infinite ground dot matrix (`AtmosphereEnvironment.ts`) with anti-aliased circular dots, inverted ice-blue contrast, camera distance falloff, and smooth horizon depth fade.
+- **Atmospheric Horizon Sky Dome:** Implemented vertical gradient sky dome shading extending from floor abyss through glowing horizon haze into deep space zenith.
+- **Auto-Redrop on Camera Pivot:** Eliminated manual `C` key requirement. Active canvas stays at camera focal plane and automatically re-drops facing the camera when the view perspective pivots.
+- **Distance-Scaled Smart Snapping:** Created `SpatialSnapper.ts` with distance-weighted screen tolerance raycasting and nearest-to-observer filtering. Automatically locks drawing plane to the 3D Z-depth of clicked objects.
+- **Depth Push/Pull Slicing:** Wired `Ctrl` + drag and scroll wheel to dynamic depth slicing with translucent occlusion muting plane and HUD.
+- **Unit Test Coverage:** Added `SpatialSnapper.test.ts` (9/9 unit tests passing across project).

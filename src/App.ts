@@ -27,6 +27,7 @@ import { OBJExporterWrapper } from './export/OBJExporterWrapper';
 import { VideoExporter } from './export/VideoExporter';
 import { AssetImporter } from './export/AssetImporter';
 import { PlanePreview } from './engine/PlanePreview';
+import { SpatialSnapper } from './engine/SpatialSnapper';
 import type { SpatialPlaneType, SpatialCanvasData } from './types/canvas';
 import type { CameraBookmark } from './types/bookmark';
 
@@ -41,6 +42,7 @@ export class App {
   private strokeRenderer!: StrokeRenderer;
   private guideSurface!: GuideSurface;
   private planePreview!: PlanePreview;
+  private spatialSnapper: SpatialSnapper = new SpatialSnapper();
   private cameraAnimator!: CameraAnimator;
   private inputManager!: InputManager;
   private projectState!: ProjectState;
@@ -116,6 +118,10 @@ export class App {
       }
     });
 
+    this.sceneManager.cameraController.onChange(() => {
+      this.handleCameraChange();
+    });
+
     this.snapToActiveCanvas();
   }
 
@@ -147,6 +153,10 @@ export class App {
       activeCanvasProvider,
       () => this.guideSurface
     );
+
+    this.brushTool.setSpatialSnapper(this.spatialSnapper, (snapPoint) => {
+      this.lockActiveCanvasToPoint(snapPoint);
+    });
 
     this.eraserTool = new EraserTool(
       this.strokeRenderer,
@@ -204,6 +214,10 @@ export class App {
       onCameraOrbit: (dTheta, dPhi) => this.sceneManager.cameraController.orbit(dTheta, dPhi),
       onCameraPan: (dx, dy) => this.sceneManager.cameraController.pan(dx, dy),
       onCameraZoom: (factor) => this.sceneManager.cameraController.zoom(factor),
+      onOrbitEnd: () => this.handleOrbitEnd(),
+      onDepthStart: () => this.startDepthAdjustment(),
+      onDepthAdjust: (dy) => this.adjustDepthSlice(dy),
+      onDepthEnd: () => this.commitDepthAdjustment(),
       onWheelScroll: (deltaY) => {
         if (this.planePreview.isActive()) {
           const step = deltaY > 0 ? 0.35 : -0.35;
@@ -376,7 +390,7 @@ export class App {
         <span class="app-badge">WebGPU</span>
       </div>
       <div class="top-actions ui-interactive">
-        <button id="btn-add-view-canvas" class="action-pill" style="background: var(--bg-active); border-color: var(--border-highlight);" title="Drop a drawing canvas facing current camera view (Hotkey: C)">➕ Canvas From View (C)</button>
+        <button id="btn-add-view-canvas" class="action-pill" style="background: var(--bg-active); border-color: var(--border-highlight);" title="Depth Slice / New Plane (Hold Ctrl + Drag or Scroll)">📐 Depth Slice</button>
         <button id="btn-minimap" class="action-pill" title="Toggle Bird's Eye View Minimap">🧭 Minimap</button>
         <button id="btn-toggle-angle-fade" class="action-pill" title="Toggle Mental Canvas angle-dependent stroke opacity">👁️ Angle Fade</button>
         <select id="select-bg-style" class="action-pill" style="cursor: pointer; outline: none; background: var(--bg-panel); color: var(--text-primary); border-radius: var(--radius-full);" title="Background Style">
@@ -399,7 +413,7 @@ export class App {
     `;
 
     header.querySelector('#btn-add-view-canvas')?.addEventListener('click', () => {
-      this.handleCreateCanvasFromView();
+      this.startDepthAdjustment();
     });
 
     header.querySelector('#btn-minimap')?.addEventListener('click', () => {
@@ -474,19 +488,19 @@ export class App {
     this.depthHud.className = 'glass-panel ui-interactive';
     this.depthHud.style.cssText =
       'display: none; position: absolute; top: 76px; left: 50%; transform: translateX(-50%); padding: 8px 18px; font-size: 13px; font-weight: 500; color: var(--accent-secondary); gap: 10px; align-items: center; z-index: 100; border-color: var(--border-highlight);';
-    this.depthHud.innerHTML = `<span>📐 New Plane Depth: <b id="depth-hud-value" style="color: #fff; font-family: var(--font-mono);">+0.0m</b> <span style="color: var(--text-secondary); font-size: 11px;">(Scroll/Wheel to slice depth, Release [C] to place)</span></span>`;
+    this.depthHud.innerHTML = `<span>📐 Plane Depth: <b id="depth-hud-value" style="color: #fff; font-family: var(--font-mono);">+0.0m</b> <span style="color: var(--text-secondary); font-size: 11px;">(Hold Ctrl + Drag or Scroll wheel to slice depth)</span></span>`;
     this.depthHudValue = this.depthHud.querySelector('#depth-hud-value') as HTMLElement;
     this.uiLayer.appendChild(this.depthHud);
 
     const btnAddView = header.querySelector('#btn-add-view-canvas') as HTMLButtonElement;
     btnAddView.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
-      this.startPlanePreview();
+      this.startDepthAdjustment();
     });
 
     window.addEventListener('pointerup', () => {
       if (this.isHoldingC) {
-        this.commitPlanePreview();
+        this.commitDepthAdjustment();
       }
     });
 
@@ -515,9 +529,124 @@ export class App {
     this.uiLayer.appendChild(status);
   }
 
-  private startPlanePreview(): void {
+  private handleCameraChange(): void {
+    const activeData = this.projectState.getActiveCanvas();
+    const activeSpatial = this.getActiveSpatialCanvas();
+    if (!activeData || !activeSpatial) return;
+
+    if (activeData.strokeIds.length === 0) {
+      const cam = this.sceneManager.camera;
+      const target = this.sceneManager.cameraController.getTarget();
+      const focalDist = cam.position.distanceTo(target);
+      const forward = new Vector3();
+      cam.getWorldDirection(forward);
+      const center = cam.position.clone().addScaledVector(forward, focalDist);
+      const rot: [number, number, number, number] = [
+        cam.quaternion.x,
+        cam.quaternion.y,
+        cam.quaternion.z,
+        cam.quaternion.w,
+      ];
+      activeSpatial.setPosition(center);
+      activeSpatial.setRotation(rot);
+      this.projectState.updateCanvasTransform(activeData.id, [center.x, center.y, center.z], rot);
+    }
+  }
+
+  private handleOrbitEnd(): void {
+    const activeData = this.projectState.getActiveCanvas();
+    const activeSpatial = this.getActiveSpatialCanvas();
+    if (!activeData || !activeSpatial) return;
+
+    if (activeData.strokeIds.length > 0) {
+      const cam = this.sceneManager.camera;
+      const forward = new Vector3();
+      cam.getWorldDirection(forward);
+      const normal = activeSpatial.getNormal();
+      const dot = forward.dot(normal);
+      if (Math.abs(dot + 1.0) > 0.08) {
+        this.autoRedropViewPlane();
+      }
+    }
+  }
+
+  private autoRedropViewPlane(): void {
+    const cam = this.sceneManager.camera;
+    const target = this.sceneManager.cameraController.getTarget();
+    const focalDist = cam.position.distanceTo(target);
+    const forward = new Vector3();
+    cam.getWorldDirection(forward);
+    const center = cam.position.clone().addScaledVector(forward, focalDist);
+    const rot: [number, number, number, number] = [
+      cam.quaternion.x,
+      cam.quaternion.y,
+      cam.quaternion.z,
+      cam.quaternion.w,
+    ];
+
+    const activeData = this.projectState.getActiveCanvas();
+    if (activeData && activeData.strokeIds.length === 0) {
+      const activeSpatial = this.getActiveSpatialCanvas();
+      if (activeSpatial) {
+        activeSpatial.setPosition(center);
+        activeSpatial.setRotation(rot);
+        this.projectState.updateCanvasTransform(activeData.id, [center.x, center.y, center.z], rot);
+        return;
+      }
+    }
+
+    const count = this.spatialCanvases.size + 1;
+    const newCanvas = this.projectState.addCanvas(
+      `View Canvas ${count}`,
+      'CUSTOM',
+      [center.x, center.y, center.z],
+      rot
+    );
+    this.registerSpatialCanvas(newCanvas);
+  }
+
+  private lockActiveCanvasToPoint(snapPoint: Vector3): void {
+    const cam = this.sceneManager.camera;
+    const forward = new Vector3();
+    cam.getWorldDirection(forward);
+
+    const depth = snapPoint.clone().sub(cam.position).dot(forward);
+    if (depth <= 0.1) return;
+
+    const planeCenter = cam.position.clone().addScaledVector(forward, depth);
+    const rot: [number, number, number, number] = [
+      cam.quaternion.x,
+      cam.quaternion.y,
+      cam.quaternion.z,
+      cam.quaternion.w,
+    ];
+
+    const activeData = this.projectState.getActiveCanvas();
+    if (activeData && activeData.strokeIds.length === 0) {
+      const activeSpatial = this.getActiveSpatialCanvas();
+      if (activeSpatial) {
+        activeSpatial.setPosition(planeCenter);
+        activeSpatial.setRotation(rot);
+        this.projectState.updateCanvasTransform(
+          activeData.id,
+          [planeCenter.x, planeCenter.y, planeCenter.z],
+          rot
+        );
+      }
+    } else {
+      const count = this.spatialCanvases.size + 1;
+      const newCanvas = this.projectState.addCanvas(
+        `Snap Plane ${count}`,
+        'CUSTOM',
+        [planeCenter.x, planeCenter.y, planeCenter.z],
+        rot
+      );
+      this.registerSpatialCanvas(newCanvas);
+    }
+  }
+
+  private startDepthAdjustment(): void {
     if (this.planePreview.isActive()) return;
-    this.isHoldingC = true;
     const cam = this.sceneManager.camera;
     const target = this.sceneManager.cameraController.getTarget();
     this.planePreview.start(cam, target);
@@ -525,12 +654,31 @@ export class App {
     this.updateDepthHud();
   }
 
-  private commitPlanePreview(): void {
+  private adjustDepthSlice(deltaY: number): void {
+    if (!this.planePreview.isActive()) {
+      this.startDepthAdjustment();
+    }
+    const step = -deltaY * 0.02;
+    this.planePreview.adjustDepth(step, this.sceneManager.camera);
+    this.updateDepthHud();
+  }
+
+  private commitDepthAdjustment(): void {
     if (!this.planePreview.isActive()) return;
     const result = this.planePreview.getResult();
     this.planePreview.stop();
     this.depthHud.style.display = 'none';
-    this.isHoldingC = false;
+
+    const activeData = this.projectState.getActiveCanvas();
+    if (activeData && activeData.strokeIds.length === 0) {
+      const activeSpatial = this.getActiveSpatialCanvas();
+      if (activeSpatial) {
+        activeSpatial.setPosition(new Vector3(...result.position));
+        activeSpatial.setRotation(result.rotation);
+        this.projectState.updateCanvasTransform(activeData.id, result.position, result.rotation);
+        return;
+      }
+    }
 
     const count = this.spatialCanvases.size + 1;
     const data = this.projectState.addCanvas(
@@ -540,6 +688,16 @@ export class App {
       result.rotation
     );
     this.registerSpatialCanvas(data);
+  }
+
+  private startPlanePreview(): void {
+    this.isHoldingC = true;
+    this.startDepthAdjustment();
+  }
+
+  private commitPlanePreview(): void {
+    this.isHoldingC = false;
+    this.commitDepthAdjustment();
   }
 
   private cancelPlanePreview(): void {

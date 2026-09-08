@@ -8,6 +8,7 @@ export interface TouchGestureCallbacks {
   onOrbit: (deltaTheta: number, deltaPhi: number) => void;
   onPan: (deltaX: number, deltaY: number) => void;
   onZoom: (deltaFactor: number) => void;
+  onGestureEnd?: () => void;
 }
 
 /**
@@ -69,6 +70,8 @@ export class TouchHandler {
     this.activeTouches.delete(event.pointerId);
     if (this.activeTouches.size === 2) {
       this.initTwoFingerGesture();
+    } else if (this.activeTouches.size === 0) {
+      this.callbacks?.onGestureEnd?.();
     }
   }
 

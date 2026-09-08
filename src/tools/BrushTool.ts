@@ -8,6 +8,7 @@ import type { ProjectState } from '../state/ProjectState';
 import type { UndoRedoManager, Command } from '../state/UndoRedoManager';
 import type { InkPresenter } from '../input/InkPresenter';
 import type { StrokePoint, StrokeData } from '../types/stroke';
+import type { SpatialSnapper } from '../engine/SpatialSnapper';
 
 /**
  * Command for adding one or multiple strokes with undo/redo capability.
@@ -16,13 +17,18 @@ class AddStrokesBatchCommand implements Command {
   constructor(
     private state: ProjectState,
     private renderer: StrokeRenderer,
-    private strokes: { data: StrokeData; binary: Float32Array; points: StrokePoint[] }[]
+    private strokes: { data: StrokeData; binary: Float32Array; points: StrokePoint[] }[],
+    private snapper?: SpatialSnapper
   ) {}
 
   public async execute(): Promise<void> {
     for (const item of this.strokes) {
       await this.state.addStroke(item.data, item.binary);
       this.renderer.renderStoredStroke(item.data, item.points);
+      this.snapper?.registerStroke(
+        item.data.id,
+        item.points.map((p) => new Vector3(p.x, p.y, p.z))
+      );
     }
   }
 
@@ -30,6 +36,7 @@ class AddStrokesBatchCommand implements Command {
     for (const item of this.strokes) {
       this.renderer.removeStroke(item.data.id);
       await this.state.removeStroke(item.data.id);
+      this.snapper?.unregisterStroke(item.data.id);
     }
   }
 }
@@ -79,12 +86,23 @@ export class BrushTool extends Tool {
     this.guideSurfaceProvider = guideSurfaceProvider;
   }
 
+  private snapper?: SpatialSnapper;
+  private onSnapLocked?: (point: Vector3) => void;
+
   /**
    * Sets or clears the active 3D mirror symmetry plane.
    */
   public setMirrorAxis(axis: 'x' | 'y' | 'z' | null, origin: Vector3 = new Vector3(0, 0, 0)): void {
     this.mirrorAxis = axis;
     this.mirrorOrigin.copy(origin);
+  }
+
+  /**
+   * Configures intelligent spatial snapping for automatic depth locking to existing objects.
+   */
+  public setSpatialSnapper(snapper: SpatialSnapper, onSnapLocked?: (point: Vector3) => void): void {
+    this.snapper = snapper;
+    this.onSnapLocked = onSnapLocked;
   }
 
   /**
@@ -102,7 +120,28 @@ export class BrushTool extends Tool {
   }
 
   public onPointerDown(point: StrokePoint, _samples: StrokePoint[], event: PointerEvent): void {
-    const hit = this.findHitPoint(point.x, point.y);
+    let hit: { x: number; y: number; z: number } | null = null;
+
+    // 1. Distance-aware snapping to existing strokes / objects
+    if (this.snapper) {
+      const snap = this.snapper.findSnapTarget(
+        event.clientX,
+        event.clientY,
+        this.camera,
+        window.innerWidth,
+        window.innerHeight,
+        24
+      );
+      if (snap) {
+        hit = { x: snap.hitPoint.x, y: snap.hitPoint.y, z: snap.hitPoint.z };
+        this.onSnapLocked?.(snap.hitPoint);
+      }
+    }
+
+    // 2. Fallback to active guide surface or canvas plane
+    if (!hit) {
+      hit = this.findHitPoint(point.x, point.y);
+    }
     if (!hit) return;
 
     this.isDrawing = true;
@@ -216,7 +255,7 @@ export class BrushTool extends Tool {
       });
     }
 
-    const command = new AddStrokesBatchCommand(this.state, this.renderer, batch);
+    const command = new AddStrokesBatchCommand(this.state, this.renderer, batch, this.snapper);
     this.undoManager.execute(command);
     this.collectedPoints = [];
   }

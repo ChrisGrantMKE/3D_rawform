@@ -4,11 +4,11 @@ import {
   WebGPURenderer,
   AmbientLight,
   DirectionalLight,
-  GridHelper,
   Color,
 } from 'three/webgpu';
 import { CameraController } from './CameraController';
 import { PostProcessPipeline, type PostFxMode } from './PostProcessPipeline';
+import { AtmosphereEnvironment } from './AtmosphereEnvironment';
 
 export type BackgroundStyle = 'dark' | 'studio' | 'light' | 'transparent';
 export type { PostFxMode };
@@ -22,9 +22,9 @@ export class SceneManager {
   public readonly renderer: WebGPURenderer;
   public readonly cameraController: CameraController;
   public readonly postProcess: PostProcessPipeline;
+  public readonly atmosphere: AtmosphereEnvironment;
 
   private readonly container: HTMLElement;
-  private readonly gridHelper: GridHelper;
   private lastFrameTime: number = performance.now();
   private updateCallbacks: Array<(deltaTime: number) => void> = [];
 
@@ -58,9 +58,8 @@ export class SceneManager {
 
     this.postProcess = new PostProcessPipeline(this.renderer, this.scene, this.camera);
 
-    this.gridHelper = new GridHelper(20, 20, 0x21262d, 0x161b22);
-    this.gridHelper.position.y = -2;
-    this.scene.add(this.gridHelper);
+    this.atmosphere = new AtmosphereEnvironment();
+    this.scene.add(this.atmosphere.getObject());
 
     this.setupLighting();
     this.setupResizeListener();
@@ -117,6 +116,7 @@ export class SceneManager {
   public dispose(): void {
     this.renderer.setAnimationLoop(null);
     this.postProcess.dispose();
+    this.atmosphere.dispose();
     this.renderer.dispose();
     if (this.renderer.domElement.parentElement) {
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
@@ -132,19 +132,19 @@ export class SceneManager {
     switch (style) {
       case 'dark':
         this.scene.background = new Color(0x0a0c10);
-        this.gridHelper.visible = true;
+        this.atmosphere.setVisible(true);
         break;
       case 'studio':
         this.scene.background = new Color(0x181e28);
-        this.gridHelper.visible = true;
+        this.atmosphere.setVisible(true);
         break;
       case 'light':
         this.scene.background = new Color(0xf1f5f9);
-        this.gridHelper.visible = true;
+        this.atmosphere.setVisible(false);
         break;
       case 'transparent':
         this.scene.background = null;
-        this.gridHelper.visible = false;
+        this.atmosphere.setVisible(false);
         break;
     }
   }

@@ -113,6 +113,20 @@ export class ProjectState {
   }
 
   /**
+   * Updates position and rotation for a canvas in project state.
+   */
+  public updateCanvasTransform(
+    canvasId: string,
+    position: [number, number, number],
+    rotation: [number, number, number, number]
+  ): void {
+    const canvas = this.project.canvases.find((c) => c.id === canvasId);
+    if (!canvas) return;
+    canvas.position = position;
+    canvas.rotation = rotation;
+  }
+
+  /**
    * Registers a newly completed stroke in state and writes binary data immediately.
    *
    * @param stroke - Stroke metadata
