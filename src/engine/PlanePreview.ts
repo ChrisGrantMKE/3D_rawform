@@ -3,24 +3,33 @@ import {
   Mesh,
   MeshBasicNodeMaterial,
   PlaneGeometry,
-  LineSegments,
-  LineBasicMaterial,
-  BufferGeometry,
-  Float32BufferAttribute,
   Vector3,
+  Vector2,
   Quaternion,
   PerspectiveCamera,
+  Color,
 } from 'three/webgpu';
+import {
+  positionLocal,
+  length,
+  smoothstep,
+  fract,
+  abs,
+  max,
+  vec4,
+  clamp,
+  uniform,
+} from 'three/tsl';
 
 /**
  * Interactive preview plane for perspective depth slicing and canvas placement.
- * Mutes/occludes everything behind the plane at its 3D intersection point.
+ * Spans the full viewport with smooth radial edge falloff, mutes/occludes
+ * objects situated behind it in 3D space, and provides focal crosshairs.
  */
 export class PlanePreview {
   private readonly group: Group;
   private muteMesh: Mesh;
-  private gridMesh: LineSegments;
-  private crosshairMesh: LineSegments;
+  private gridMesh: Mesh;
 
   private isVisible: boolean = false;
   private baseTarget: Vector3 = new Vector3();
@@ -28,32 +37,72 @@ export class PlanePreview {
   private currentQuat: Quaternion = new Quaternion();
   private currentPos: Vector3 = new Vector3();
 
+  // Dynamic TSL uniforms for viewport-spanning grid and theme styling
+  private gridSpanUniform = uniform(new Vector2(30, 20));
+  private gridColorUniform = uniform(new Color(0x818cf8));
+  private muteColorUniform = uniform(new Color(0x0a0c10));
+  private muteOpacityUniform = uniform(0.72);
+
   constructor() {
     this.group = new Group();
     this.group.name = 'PlanePreview_Group';
     this.group.visible = false;
 
-    // 1. Translucent muting plane (semi-occluding background)
-    const muteGeo = new PlaneGeometry(50, 50);
+    // Unit geometry [-1, 1] scaled dynamically to span 1.8x the active camera frustum
+    const unitPlane = new PlaneGeometry(2, 2);
+
+    // 1. Translucent muting plane with soft radial vignette
     const muteMat = new MeshBasicNodeMaterial();
-    muteMat.color.set(0x0a0c10); // Scene background color
-    muteMat.opacity = 0.72;
     muteMat.transparent = true;
     muteMat.depthWrite = false;
 
-    this.muteMesh = new Mesh(muteGeo, muteMat);
+    const muteDist = length(positionLocal.xy);
+    const muteEdgeFade = smoothstep(1.0, 0.25, muteDist);
+    muteMat.colorNode = vec4(this.muteColorUniform, muteEdgeFade.mul(this.muteOpacityUniform));
+
+    this.muteMesh = new Mesh(unitPlane, muteMat);
     this.muteMesh.name = 'PlanePreview_MutePlane';
-    this.muteMesh.position.z = -0.005; // Slightly behind grid
+    this.muteMesh.position.z = -0.005; // Placed slightly behind grid lines
 
-    // 2. Perspective Guide Grid
-    this.gridMesh = this.createGrid(10, 10, 6);
+    // 2. Viewport-spanning procedural perspective grid with edge fadeout
+    const gridMat = new MeshBasicNodeMaterial();
+    gridMat.transparent = true;
+    gridMat.depthWrite = false;
 
-    // 3. Central alignment crosshair
-    this.crosshairMesh = this.createCrosshair(1.2);
+    const normPos = positionLocal.xy;
+    const radialDist = length(normPos);
+    // Smooth fadeout as grid approaches viewport periphery
+    const edgeFade = smoothstep(1.0, 0.2, radialDist);
+
+    // World coordinates on the plane for invariant 1.0m and 5.0m grid intervals
+    const worldPos = normPos.mul(this.gridSpanUniform.div(2.0));
+
+    // Minor grid lines every 1.0 world unit
+    const minorCell = abs(fract(worldPos.sub(0.5)).sub(0.5));
+    const minorLine = max(smoothstep(0.04, 0.015, minorCell.x), smoothstep(0.04, 0.015, minorCell.y));
+
+    // Major grid lines every 5.0 world units
+    const majorCell = abs(fract(worldPos.div(5.0).sub(0.5)).sub(0.5));
+    const majorLine = max(smoothstep(0.02, 0.006, majorCell.x), smoothstep(0.02, 0.006, majorCell.y));
+
+    // Central crosshair ring and axes within center
+    const centerDist = length(worldPos);
+    const crosshairX = smoothstep(0.035, 0.01, abs(worldPos.y)).mul(smoothstep(1.8, 1.4, abs(worldPos.x)));
+    const crosshairY = smoothstep(0.035, 0.01, abs(worldPos.x)).mul(smoothstep(1.8, 1.4, abs(worldPos.y)));
+    const crosshairRing = smoothstep(0.03, 0.01, abs(centerDist.sub(0.6)));
+    const crosshair = max(max(crosshairX, crosshairY), crosshairRing);
+
+    // Combine lines and crosshair with edge fade
+    const lineCombined = max(minorLine.mul(0.35), majorLine.mul(0.85));
+    const totalLineAlpha = clamp(max(lineCombined, crosshair).mul(edgeFade).mul(0.85), 0.0, 1.0);
+
+    gridMat.colorNode = vec4(this.gridColorUniform, totalLineAlpha);
+
+    this.gridMesh = new Mesh(unitPlane, gridMat);
+    this.gridMesh.name = 'PlanePreview_GridMesh';
 
     this.group.add(this.muteMesh);
     this.group.add(this.gridMesh);
-    this.group.add(this.crosshairMesh);
   }
 
   /**
@@ -71,7 +120,31 @@ export class PlanePreview {
   }
 
   /**
-   * Begins interactive preview aligned to the current camera viewpoint.
+   * Adapts preview colors to dark, studio, light, or transparent theme.
+   */
+  public setStyle(style: 'dark' | 'studio' | 'light' | 'transparent'): void {
+    if (style === 'light') {
+      this.gridColorUniform.value.set(0x2563eb); // Rich royal blue for high contrast
+      this.muteColorUniform.value.set(0xf1f5f9);
+      this.muteOpacityUniform.value = 0.8;
+    } else if (style === 'studio') {
+      this.gridColorUniform.value.set(0x38bdf8); // Sky cyan
+      this.muteColorUniform.value.set(0x181e28);
+      this.muteOpacityUniform.value = 0.72;
+    } else if (style === 'transparent') {
+      this.gridColorUniform.value.set(0x818cf8);
+      this.muteColorUniform.value.set(0x020617);
+      this.muteOpacityUniform.value = 0.55;
+    } else {
+      // Dark
+      this.gridColorUniform.value.set(0x818cf8); // Indigo
+      this.muteColorUniform.value.set(0x0a0c10);
+      this.muteOpacityUniform.value = 0.72;
+    }
+  }
+
+  /**
+   * Begins interactive preview aligned to current camera viewpoint.
    *
    * @param camera - Active camera
    * @param target - 3D focal target
@@ -126,7 +199,7 @@ export class PlanePreview {
   }
 
   /**
-   * Updates preview position along the camera forward vector.
+   * Updates preview transform and dynamically scales to span the active camera frustum.
    */
   private updateTransform(camera: PerspectiveCamera): void {
     const forward = new Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
@@ -135,72 +208,29 @@ export class PlanePreview {
 
     this.group.position.copy(this.currentPos);
     this.group.quaternion.copy(this.currentQuat);
+
+    // Compute view frustum dimensions at the plane's exact 3D depth
+    const distToCam = Math.max(0.5, camera.position.distanceTo(this.currentPos));
+    const vFovRad = (camera.fov * Math.PI) / 180;
+    const vHeight = 2 * Math.tan(vFovRad / 2) * distToCam;
+    const vWidth = vHeight * camera.aspect;
+
+    // Scale to 1.8x viewport size so lines fade out smoothly toward and beyond screen edges
+    const spanW = Math.max(16, vWidth * 1.8);
+    const spanH = Math.max(16, vHeight * 1.8);
+
+    this.group.scale.set(spanW / 2, spanH / 2, 1);
+    this.gridSpanUniform.value.set(spanW, spanH);
   }
 
   /**
-   * Creates the visual perspective grid with accent highlights.
-   */
-  private createGrid(w: number, h: number, divisions: number): LineSegments {
-    const hw = w / 2;
-    const hh = h / 2;
-    const vertices: number[] = [];
-
-    // Outer boundary
-    vertices.push(
-      -hw, -hh, 0,  hw, -hh, 0,
-       hw, -hh, 0,  hw,  hh, 0,
-       hw,  hh, 0, -hw,  hh, 0,
-      -hw,  hh, 0, -hw, -hh, 0
-    );
-
-    // Grid lines
-    for (let i = 1; i < divisions; i++) {
-      const gx = -hw + (w * i) / divisions;
-      const gy = -hh + (h * i) / divisions;
-      vertices.push(gx, -hh, 0, gx, hh, 0);
-      vertices.push(-hw, gy, 0, hw, gy, 0);
-    }
-
-    const geo = new BufferGeometry();
-    geo.setAttribute('position', new Float32BufferAttribute(vertices, 3));
-
-    const mat = new LineBasicMaterial({
-      color: 0x818cf8, // Indigo glow
-      transparent: true,
-      opacity: 0.65,
-    });
-
-    return new LineSegments(geo, mat);
-  }
-
-  /**
-   * Creates central alignment crosshair.
-   */
-  private createCrosshair(size: number): LineSegments {
-    const s = size / 2;
-    const vertices = [
-      -s, 0, 0.001,  s, 0, 0.001,
-      0, -s, 0.001,  0, s, 0.001,
-    ];
-    const geo = new BufferGeometry();
-    geo.setAttribute('position', new Float32BufferAttribute(vertices, 3));
-    const mat = new LineBasicMaterial({
-      color: 0x22d3ee, // Cyan tick
-      transparent: true,
-      opacity: 0.9,
-    });
-    return new LineSegments(geo, mat);
-  }
-
-  /**
-   * Disposes of resources.
+   * Disposes of geometry and materials.
    */
   public dispose(): void {
     this.muteMesh.geometry.dispose();
     (this.muteMesh.material as MeshBasicNodeMaterial).dispose();
     this.gridMesh.geometry.dispose();
-    (this.gridMesh.material as LineBasicMaterial).dispose();
-    this.crosshairMesh.geometry.dispose();
-    (this.crosshairMesh.material as LineBasicMaterial).dispose();
+    (this.gridMesh.material as MeshBasicNodeMaterial).dispose();
+    this.group.clear();
   }
 }

@@ -129,8 +129,8 @@ export class App {
     const project = this.projectState.getProject();
     for (const canvasData of project.canvases) {
       const spatial = new SpatialCanvas(canvasData);
-      // Keep only active canvas grid visible initially; hide others to eliminate clutter
-      spatial.setGridVisible(canvasData.id === project.activeCanvasId);
+      // Canvas grids are hidden during drawing/navigation; only shown during plane establishment
+      spatial.setGridVisible(false);
       this.spatialCanvases.set(canvasData.id, spatial);
       this.sceneManager.scene.add(spatial.getObject());
     }
@@ -432,6 +432,7 @@ export class App {
     header.querySelector('#select-bg-style')?.addEventListener('change', (e) => {
       const style = (e.target as HTMLSelectElement).value as BackgroundStyle;
       this.sceneManager.setBackgroundStyle(style);
+      this.planePreview.setStyle(style);
     });
 
     header.querySelector('#select-postfx-mode')?.addEventListener('change', (e) => {
@@ -797,9 +798,9 @@ export class App {
     this.spatialCanvases.set(data.id, spatial);
     this.sceneManager.scene.add(spatial.getObject());
 
-    // Only allow the new canvas to display its grid temporarily; hide all older canvas grids
-    for (const [id, c] of this.spatialCanvases) {
-      c.setGridVisible(id === data.id);
+    // All canvas grids remain hidden; grid is only visible when establishing a new plane
+    for (const [, c] of this.spatialCanvases) {
+      c.setGridVisible(false);
     }
 
     this.handleSelectCanvas(data.id);

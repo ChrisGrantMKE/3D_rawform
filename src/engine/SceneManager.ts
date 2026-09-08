@@ -133,18 +133,22 @@ export class SceneManager {
       case 'dark':
         this.scene.background = new Color(0x0a0c10);
         this.atmosphere.setVisible(true);
+        this.atmosphere.setStyle('dark');
         break;
       case 'studio':
         this.scene.background = new Color(0x181e28);
         this.atmosphere.setVisible(true);
+        this.atmosphere.setStyle('studio');
         break;
       case 'light':
-        this.scene.background = new Color(0xf1f5f9);
-        this.atmosphere.setVisible(false);
+        this.scene.background = new Color(0xf8fafc);
+        this.atmosphere.setVisible(true);
+        this.atmosphere.setStyle('light');
         break;
       case 'transparent':
         this.scene.background = null;
-        this.atmosphere.setVisible(false);
+        this.atmosphere.setVisible(true);
+        this.atmosphere.setStyle('transparent');
         break;
     }
   }

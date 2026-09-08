@@ -48,6 +48,7 @@ export class SpatialCanvas {
     this.plane = new Plane();
 
     this.outlineMesh = this.createOutline(data.width, data.height);
+    this.outlineMesh.visible = false;
     this.hitPlaneMesh = this.createHitPlane(data.width, data.height);
 
     this.group.add(this.outlineMesh);
