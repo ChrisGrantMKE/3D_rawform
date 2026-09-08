@@ -1,26 +1,26 @@
 # Active Context — 3D_rawform
 
 ## Current Phase
-**Pre-development** — Project planning and toolchain setup.
+**Phases 1–3 Core Completed** — All functional requirements from PROJECT_PLAN.md are implemented, tested, and running. Preparing for comprehensive UI/UX overhaul (studio-grade creative workspace).
 
 ## What's Been Done
-- [x] Git repository initialized and pushed to GitHub (ChrisGrantMKE/3D_rawform)
-- [x] Project plan created (DOCS/PROJECT_PLAN.md) with 40+ feature requirements
-- [x] Vibe coding toolchain documented (DOCS/VIBE_CODING_TOOLCHAIN.md)
-- [x] AGENTS.md created at project root
-- [x] Memory bank initialized
+- [x] Phase 1 MVP Core Engine: WebGPU, Makio MeshLine strokes, OPFS binary storage via Web Worker, Dexie.js metadata, curve smoothing.
+- [x] Phase 2 Storytelling & Polish: GSAP + SLERP flythrough tours, bookmark timeline, per-canvas layers, parallel & hinge projections, selection/transform gizmo, shape tools, GLB/PNG export.
+- [x] Phase 3 Advanced Tools: 3D curved guides (sphere, cylinder, cone, torus), live mirror symmetry, 3D liquify stroke deformation, MP4 video export with mediabunny, reference image/model import.
+- [x] Dynamic Plane Expansion & Canvas From View (hotkey `C` + Hold C depth slicing preview).
+- [x] Bird's Eye View Minimap (`GC-09`): Top-down radar view with camera frustum and interactive navigation.
+- [x] Angle-Dependent Stroke Opacity (`LR-03`): Mental Canvas signature edge-on grazing angle fade.
+- [x] OBJ Export (`IO-04`): Wavefront .obj export.
+- [x] Background Styles (`LR-06`): Dark, studio, light, transparent environments.
+- [x] Automated Unit Test Suite: Vitest installed, unit tests covering math, splines, canvas intersection, undo/redo commands.
+- [x] Android Capacitor Project: `android/` directory generated and synced.
+- [x] Post-Processing Effects: Depth of Field (`LR-04`) & Toon cel-shading (`LR-05`) via WebGPU TSL pipeline.
 
 ## Current Focus
-- Setting up the development environment (Vite + TypeScript + Three.js)
-- Beginning Phase 1 — Core Engine (MVP)
+- Rethinking and refining the UI interface, navigation, ergonomics, and display to transform from the engineering draft harness to a studio-grade creative sketching workspace (inspired by Procreate, Mental Canvas, and Feather 3D).
 
 ## Immediate Next Steps
-1. Initialize the Vite + TypeScript project
-2. Install Three.js, MeshLine, GSAP, Dexie.js dependencies
-3. Create the SceneManager (render loop, camera, lights)
-4. Create the InputManager (pointer event state machine)
-5. Create the StrokeRenderer (first pressure-sensitive stroke)
-
-## Blockers
-- GitHub CLI auth needs to be completed (SSH key works, `gh` token expired)
-- Android SDK/JDK not installed (deferred to Phase 3)
+1. Consolidate scattered floating panels (CanvasPanel, GuidePanel, LayerPanel, Timeline) into a unified, collapsible tabbed inspector drawer.
+2. Build non-dominant hand quick rail for brush size/opacity scrubbers and instant undo/redo thumb buttons.
+3. Polish floating dock with high-precision SVG iconography and active glow indicators.
+4. Streamline touch & stylus ergonomics for Surface Pro and tablet drawing.

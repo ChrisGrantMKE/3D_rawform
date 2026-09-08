@@ -155,6 +155,32 @@ export class SpatialCanvas {
   }
 
   /**
+   * Returns the plane normal in world space coordinates.
+   */
+  public getNormal(): Vector3 {
+    return new Vector3(0, 0, 1).applyQuaternion(this.group.quaternion).normalize();
+  }
+
+  /**
+   * Calculates view-angle facing factor (0.0 to 1.0) relative to a camera.
+   * Grazing edge-on angles approach 0, face-on angles approach 1.
+   *
+   * @param cameraPosition - Camera world position
+   * @param grazingThreshold - Cosine threshold below which opacity fades
+   * @returns Facing factor from 0.0 (edge-on) to 1.0 (face-on)
+   */
+  public getFacingFactor(cameraPosition: Vector3, grazingThreshold: number = 0.22): number {
+    const normal = this.getNormal();
+    const viewDir = cameraPosition.clone().sub(this.group.position).normalize();
+    const cosAngle = Math.abs(normal.dot(viewDir));
+
+    if (cosAngle <= grazingThreshold * 0.4) return 0.0;
+    if (cosAngle >= grazingThreshold * 1.8) return 1.0;
+    const t = (cosAngle - grazingThreshold * 0.4) / (grazingThreshold * 1.4);
+    return t * t * (3 - 2 * t);
+  }
+
+  /**
    * Transforms a world 3D position into 2D local canvas coordinates.
    *
    * @param worldPoint - 3D world coordinate

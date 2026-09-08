@@ -8,6 +8,10 @@ import {
   Color,
 } from 'three/webgpu';
 import { CameraController } from './CameraController';
+import { PostProcessPipeline, type PostFxMode } from './PostProcessPipeline';
+
+export type BackgroundStyle = 'dark' | 'studio' | 'light' | 'transparent';
+export type { PostFxMode };
 
 /**
  * Manages the Three.js WebGPU scene, lighting, camera, and render loop.
@@ -17,6 +21,7 @@ export class SceneManager {
   public readonly camera: PerspectiveCamera;
   public readonly renderer: WebGPURenderer;
   public readonly cameraController: CameraController;
+  public readonly postProcess: PostProcessPipeline;
 
   private readonly container: HTMLElement;
   private readonly gridHelper: GridHelper;
@@ -50,6 +55,8 @@ export class SceneManager {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
     this.container.appendChild(this.renderer.domElement);
+
+    this.postProcess = new PostProcessPipeline(this.renderer, this.scene, this.camera);
 
     this.gridHelper = new GridHelper(20, 20, 0x21262d, 0x161b22);
     this.gridHelper.position.y = -2;
@@ -92,7 +99,16 @@ export class SceneManager {
    * Performs an immediate synchronous render pass.
    */
   public render(): void {
-    this.renderer.render(this.scene, this.camera);
+    this.postProcess.render();
+  }
+
+  /**
+   * Sets the active post-processing effect mode.
+   *
+   * @param mode - 'none' | 'dof' | 'toon' | 'all'
+   */
+  public setPostFxMode(mode: PostFxMode): void {
+    this.postProcess.setMode(mode);
   }
 
   /**
@@ -100,9 +116,36 @@ export class SceneManager {
    */
   public dispose(): void {
     this.renderer.setAnimationLoop(null);
+    this.postProcess.dispose();
     this.renderer.dispose();
     if (this.renderer.domElement.parentElement) {
       this.renderer.domElement.parentElement.removeChild(this.renderer.domElement);
+    }
+  }
+
+  /**
+   * Sets the 3D scene background style.
+   *
+   * @param style - 'dark', 'studio', 'light', or 'transparent'
+   */
+  public setBackgroundStyle(style: BackgroundStyle): void {
+    switch (style) {
+      case 'dark':
+        this.scene.background = new Color(0x0a0c10);
+        this.gridHelper.visible = true;
+        break;
+      case 'studio':
+        this.scene.background = new Color(0x181e28);
+        this.gridHelper.visible = true;
+        break;
+      case 'light':
+        this.scene.background = new Color(0xf1f5f9);
+        this.gridHelper.visible = true;
+        break;
+      case 'transparent':
+        this.scene.background = null;
+        this.gridHelper.visible = false;
+        break;
     }
   }
 
@@ -140,7 +183,7 @@ export class SceneManager {
         cb(deltaTime);
       }
 
-      this.renderer.render(this.scene, this.camera);
+      this.postProcess.render();
     });
   }
 }

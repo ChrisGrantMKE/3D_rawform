@@ -1,4 +1,5 @@
-import { SceneManager } from './engine/SceneManager';
+import { Euler, Vector3 } from 'three/webgpu';
+import { SceneManager, type BackgroundStyle, type PostFxMode } from './engine/SceneManager';
 import { SpatialCanvas } from './engine/SpatialCanvas';
 import { StrokeRenderer } from './engine/StrokeRenderer';
 import { CameraAnimator } from './engine/CameraAnimator';
@@ -19,8 +20,10 @@ import { CanvasPanel } from './ui/CanvasPanel';
 import { LayerPanel } from './ui/LayerPanel';
 import { GuidePanel } from './ui/GuidePanel';
 import { BookmarkTimeline } from './ui/BookmarkTimeline';
+import { BirdsEyeView, type MinimapCanvasItem } from './ui/BirdsEyeView';
 import { ImageExporter } from './export/ImageExporter';
 import { GLTFExporterWrapper } from './export/GLTFExporterWrapper';
+import { OBJExporterWrapper } from './export/OBJExporterWrapper';
 import { VideoExporter } from './export/VideoExporter';
 import { AssetImporter } from './export/AssetImporter';
 import { PlanePreview } from './engine/PlanePreview';
@@ -57,8 +60,11 @@ export class App {
   private layerPanel!: LayerPanel;
   private guidePanel!: GuidePanel;
   private bookmarkTimeline!: BookmarkTimeline;
+  private birdsEyeView!: BirdsEyeView;
   private gltfExporter: GLTFExporterWrapper = new GLTFExporterWrapper();
+  private objExporter: OBJExporterWrapper = new OBJExporterWrapper();
 
+  private isAngleFadeEnabled: boolean = true;
   private isHoldingC: boolean = false;
   private depthHud!: HTMLElement;
   private depthHudValue!: HTMLElement;
@@ -95,6 +101,21 @@ export class App {
     this.setupTools();
     this.setupInput();
     this.setupUI();
+
+    this.birdsEyeView = new BirdsEyeView(this.uiLayer, {
+      onNavigateTo: (wx, wz) => {
+        const curTarget = this.sceneManager.cameraController.getTarget();
+        this.sceneManager.cameraController.setTarget(new Vector3(wx, curTarget.y, wz));
+      },
+    });
+
+    this.sceneManager.onUpdate(() => {
+      this.updateMinimap();
+      if (this.isAngleFadeEnabled) {
+        this.updateStrokeAngleFading();
+      }
+    });
+
     this.snapToActiveCanvas();
   }
 
@@ -356,14 +377,52 @@ export class App {
       </div>
       <div class="top-actions ui-interactive">
         <button id="btn-add-view-canvas" class="action-pill" style="background: var(--bg-active); border-color: var(--border-highlight);" title="Drop a drawing canvas facing current camera view (Hotkey: C)">➕ Canvas From View (C)</button>
+        <button id="btn-minimap" class="action-pill" title="Toggle Bird's Eye View Minimap">🧭 Minimap</button>
+        <button id="btn-toggle-angle-fade" class="action-pill" title="Toggle Mental Canvas angle-dependent stroke opacity">👁️ Angle Fade</button>
+        <select id="select-bg-style" class="action-pill" style="cursor: pointer; outline: none; background: var(--bg-panel); color: var(--text-primary); border-radius: var(--radius-full);" title="Background Style">
+          <option value="dark">🌑 Dark</option>
+          <option value="studio">🌌 Studio</option>
+          <option value="light">☀️ Light</option>
+          <option value="transparent">🔲 Alpha</option>
+        </select>
+        <select id="select-postfx-mode" class="action-pill" style="cursor: pointer; outline: none; background: var(--bg-panel); color: var(--text-primary); border-radius: var(--radius-full);" title="Post-Processing Effects">
+          <option value="none">✨ FX: None</option>
+          <option value="dof">🎥 FX: DoF</option>
+          <option value="toon">🎨 FX: Toon</option>
+          <option value="all">🎬 FX: All</option>
+        </select>
         <button id="btn-export-png" class="action-pill">📷 Snapshot</button>
-        <button id="btn-export-glb" class="action-pill">📦 Export 3D</button>
-        <button id="btn-export-mp4" class="action-pill">🎬 Export MP4</button>
+        <button id="btn-export-glb" class="action-pill">📦 GLB</button>
+        <button id="btn-export-obj" class="action-pill">📄 OBJ</button>
+        <button id="btn-export-mp4" class="action-pill">🎬 MP4</button>
       </div>
     `;
 
     header.querySelector('#btn-add-view-canvas')?.addEventListener('click', () => {
       this.handleCreateCanvasFromView();
+    });
+
+    header.querySelector('#btn-minimap')?.addEventListener('click', () => {
+      this.birdsEyeView.toggle();
+    });
+
+    header.querySelector('#btn-toggle-angle-fade')?.addEventListener('click', (e) => {
+      this.isAngleFadeEnabled = !this.isAngleFadeEnabled;
+      const btn = e.currentTarget as HTMLElement;
+      btn.style.opacity = this.isAngleFadeEnabled ? '1.0' : '0.5';
+      if (!this.isAngleFadeEnabled) {
+        this.strokeRenderer.updateAngleOpacities(() => 1.0);
+      }
+    });
+
+    header.querySelector('#select-bg-style')?.addEventListener('change', (e) => {
+      const style = (e.target as HTMLSelectElement).value as BackgroundStyle;
+      this.sceneManager.setBackgroundStyle(style);
+    });
+
+    header.querySelector('#select-postfx-mode')?.addEventListener('change', (e) => {
+      const mode = (e.target as HTMLSelectElement).value as PostFxMode;
+      this.sceneManager.setPostFxMode(mode);
     });
 
     header.querySelector('#btn-export-png')?.addEventListener('click', () => {
@@ -372,6 +431,10 @@ export class App {
 
     header.querySelector('#btn-export-glb')?.addEventListener('click', () => {
       this.gltfExporter.downloadGLB(this.sceneManager.scene);
+    });
+
+    header.querySelector('#btn-export-obj')?.addEventListener('click', () => {
+      this.objExporter.downloadOBJ(this.sceneManager.scene);
     });
 
     header.querySelector('#btn-export-mp4')?.addEventListener('click', async () => {
@@ -616,6 +679,49 @@ export class App {
     this.sceneManager.cameraController.snapToCanvas(active.position, active.rotation, 9);
   }
 
+  private updateMinimap(): void {
+    if (!this.birdsEyeView || !this.birdsEyeView.getIsVisible()) return;
+
+    const activeCanvas = this.projectState.getActiveCanvas();
+    const items: MinimapCanvasItem[] = [];
+
+    for (const [id, spatial] of this.spatialCanvases) {
+      const obj = spatial.getObject();
+      const euler = new Euler().setFromQuaternion(obj.quaternion, 'YXZ');
+      items.push({
+        id,
+        name: spatial.name,
+        x: obj.position.x,
+        z: obj.position.z,
+        width: spatial.width,
+        angle: euler.y,
+        isActive: activeCanvas ? activeCanvas.id === id : false,
+      });
+    }
+
+    const cam = this.sceneManager.camera;
+    const target = this.sceneManager.cameraController.getTarget();
+    const camEuler = new Euler().setFromQuaternion(cam.quaternion, 'YXZ');
+
+    this.birdsEyeView.update(items, {
+      x: cam.position.x,
+      z: cam.position.z,
+      targetX: target.x,
+      targetZ: target.z,
+      angle: camEuler.y,
+      fov: cam.fov,
+    });
+  }
+
+  private updateStrokeAngleFading(): void {
+    const camPos = this.sceneManager.camera.position;
+    this.strokeRenderer.updateAngleOpacities((canvasId: string) => {
+      const spatial = this.spatialCanvases.get(canvasId);
+      if (!spatial) return 1.0;
+      return spatial.getFacingFactor(camPos);
+    });
+  }
+
   /**
    * Disposes of application subsystems.
    */
@@ -633,5 +739,6 @@ export class App {
     this.layerPanel.dispose();
     this.guidePanel.dispose();
     this.bookmarkTimeline.dispose();
+    this.birdsEyeView.dispose();
   }
 }

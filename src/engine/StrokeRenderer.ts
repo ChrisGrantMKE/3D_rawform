@@ -23,7 +23,12 @@ export class StrokeRenderer {
     this.strokeGroup.name = 'StrokeRenderer_Group';
     this.scene.add(this.strokeGroup);
     this.strokeMeshMap = new Map();
+    this.strokeBaseOpacity = new Map();
+    this.strokeCanvasMap = new Map();
   }
+
+  private readonly strokeBaseOpacity: Map<string, number>;
+  private readonly strokeCanvasMap: Map<string, string>;
 
   /**
    * Returns a map of all rendered stroke meshes.
@@ -131,8 +136,21 @@ export class StrokeRenderer {
 
     this.strokeGroup.add(meshLine as unknown as Object3D);
     this.strokeMeshMap.set(data.id, meshLine);
+    this.registerStrokeCanvas(data.id, data.canvasId, data.opacity);
 
     return meshLine;
+  }
+
+  /**
+   * Associates a stroke with its owning canvas and base opacity.
+   *
+   * @param strokeId - Unique stroke identifier
+   * @param canvasId - Owning canvas identifier
+   * @param baseOpacity - Original base opacity of stroke
+   */
+  public registerStrokeCanvas(strokeId: string, canvasId: string, baseOpacity: number = 1.0): void {
+    this.strokeCanvasMap.set(strokeId, canvasId);
+    this.strokeBaseOpacity.set(strokeId, baseOpacity);
   }
 
   /**
@@ -150,6 +168,26 @@ export class StrokeRenderer {
   }
 
   /**
+   * Updates opacity of all strokes dynamically based on their canvas angle facing factor.
+   *
+   * @param getCanvasFacing - Lookup function returning facing factor (0.0 to 1.0) given a canvasId
+   */
+  public updateAngleOpacities(getCanvasFacing: (canvasId: string) => number): void {
+    for (const [strokeId, meshLine] of this.strokeMeshMap) {
+      const canvasId = this.strokeCanvasMap.get(strokeId);
+      if (!canvasId) continue;
+      const facing = getCanvasFacing(canvasId);
+      const baseOpacity = this.strokeBaseOpacity.get(strokeId) ?? 1.0;
+      const targetOpacity = Math.max(0.01, baseOpacity * facing);
+      const mat = meshLine.material;
+      if (mat && !Array.isArray(mat)) {
+        mat.opacity = targetOpacity;
+        mat.transparent = true;
+      }
+    }
+  }
+
+  /**
    * Removes a stroke from the scene and disposes its GPU resources.
    *
    * @param strokeId - Unique identifier of the stroke to remove
@@ -163,6 +201,8 @@ export class StrokeRenderer {
     this.strokeGroup.remove(meshLine as unknown as Object3D);
     meshLine.dispose();
     this.strokeMeshMap.delete(strokeId);
+    this.strokeCanvasMap.delete(strokeId);
+    this.strokeBaseOpacity.delete(strokeId);
   }
 
   /**
@@ -243,6 +283,8 @@ export class StrokeRenderer {
       meshLine.dispose();
     }
     this.strokeMeshMap.clear();
+    this.strokeCanvasMap.clear();
+    this.strokeBaseOpacity.clear();
   }
 
   /**

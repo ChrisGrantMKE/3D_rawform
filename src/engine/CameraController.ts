@@ -126,6 +126,18 @@ export class CameraController {
   }
 
   /**
+   * Sets the camera focal target in world coordinates and updates camera view.
+   *
+   * @param newTarget - Target focal point
+   */
+  public setTarget(newTarget: Vector3): void {
+    const diff = newTarget.clone().sub(this.target);
+    this.target.copy(newTarget);
+    this.camera.position.add(diff);
+    this.camera.lookAt(this.target);
+  }
+
+  /**
    * Updates camera position from spherical coordinates.
    */
   private updateCameraPosition(): void {
