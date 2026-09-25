@@ -362,10 +362,6 @@ export class App {
       onExportPNG: () => ImageExporter.downloadSnapshot(this.sceneManager.renderer.domElement),
       onExportGLTF: () => this.gltfExporter.downloadGLB(this.sceneManager.scene),
       onDownloadBlenderAddon: () => BlenderIntegration.downloadAddon(),
-      onToggleTwoFingerMode: () => {
-        this.inputManager.toggleTwoFingerMode();
-        this.toolbar.updateTwoFingerModeIcon(this.inputManager.getTwoFingerMode());
-      },
     });
 
     this.undoManager.onChange(() => {
@@ -419,9 +415,18 @@ export class App {
     const header = document.createElement('div');
     header.className = 'top-header';
     header.innerHTML = `
-      <div class="app-branding glass-panel ui-interactive">
-        <span class="app-title">3D_rawform</span>
-        <span class="app-badge">WebGPU</span>
+      <div class="top-left-group" style="display: flex; flex-direction: column; gap: 8px; pointer-events: none;">
+        <div class="app-branding glass-panel ui-interactive" style="pointer-events: auto; width: fit-content;">
+          <span class="app-title">3D_rawform</span>
+          <span class="app-badge">WebGPU</span>
+        </div>
+        <div class="glass-panel ui-interactive" style="pointer-events: auto; display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 11px; font-weight: bold; color: var(--text-secondary); width: fit-content; user-select: none;">
+          <span>2-FINGER DRAG</span>
+          <div id="btn-two-finger-mode" style="display: flex; background: var(--bg-surface); border-radius: 4px; overflow: hidden; cursor: pointer; border: 1px solid var(--border-color);">
+            <div id="toggle-orbit" style="padding: 4px 10px; background: var(--accent-primary); color: white;">ORBIT</div>
+            <div id="toggle-pan" style="padding: 4px 10px; background: transparent; color: var(--text-secondary);">PAN</div>
+          </div>
+        </div>
       </div>
       <div class="top-actions ui-interactive">
         <button id="btn-add-view-canvas" class="action-pill" style="background: var(--bg-active); border-color: var(--border-highlight);" title="Depth Slice / New Plane (Hold Ctrl + Drag or Scroll)">📐 Depth Slice</button>
@@ -448,6 +453,26 @@ export class App {
 
     header.querySelector('#btn-add-view-canvas')?.addEventListener('click', () => {
       this.startDepthAdjustment();
+    });
+
+    const btnTwoFingerMode = header.querySelector('#btn-two-finger-mode') as HTMLElement;
+    const toggleOrbit = header.querySelector('#toggle-orbit') as HTMLElement;
+    const togglePan = header.querySelector('#toggle-pan') as HTMLElement;
+
+    btnTwoFingerMode?.addEventListener('click', () => {
+      this.inputManager.toggleTwoFingerMode();
+      const mode = this.inputManager.getTwoFingerMode();
+      if (mode === 'orbit') {
+        toggleOrbit.style.background = 'var(--accent-primary)';
+        toggleOrbit.style.color = 'white';
+        togglePan.style.background = 'transparent';
+        togglePan.style.color = 'var(--text-secondary)';
+      } else {
+        togglePan.style.background = 'var(--accent-primary)';
+        togglePan.style.color = 'white';
+        toggleOrbit.style.background = 'transparent';
+        toggleOrbit.style.color = 'var(--text-secondary)';
+      }
     });
 
     header.querySelector('#btn-minimap')?.addEventListener('click', () => {

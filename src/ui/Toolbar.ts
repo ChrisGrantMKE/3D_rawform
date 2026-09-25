@@ -14,7 +14,6 @@ export interface ToolbarCallbacks {
   onExportPNG: () => void;
   onExportGLTF: () => void;
   onDownloadBlenderAddon: () => void;
-  onToggleTwoFingerMode: () => void;
 }
 
 /**
@@ -31,7 +30,6 @@ export class Toolbar {
   private btnLiquify!: HTMLButtonElement;
   private btnUndo!: HTMLButtonElement;
   private btnRedo!: HTMLButtonElement;
-  private btnTwoFingerMode!: HTMLButtonElement;
 
   constructor(container: HTMLElement, callbacks: ToolbarCallbacks) {
     this.container = container;
@@ -58,18 +56,6 @@ export class Toolbar {
 
   public dispose(): void {
     this.rootElement.remove();
-  }
-
-  public updateTwoFingerModeIcon(mode: 'orbit' | 'pan'): void {
-    if (mode === 'orbit') {
-      this.btnTwoFingerMode.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 2.5C7.4 2.5 3.5 5.8 2.6 10H4.7c.9-3.2 3.8-5.5 7.3-5.5 4.1 0 7.5 3.4 7.5 7.5 0 1.2-.3 2.3-.8 3.3l-1.9-1.9v5.5h5.5l-2.1-2.1c.8-1.4 1.3-3 1.3-4.8 0-5.2-4.3-9.5-9.5-9.5z"/></svg>`;
-      this.btnTwoFingerMode.title = '2-Finger Mode: Orbit (Click to Pan)';
-      this.btnTwoFingerMode.classList.add('active');
-    } else {
-      this.btnTwoFingerMode.innerHTML = `<svg viewBox="0 0 24 24"><path d="M10 9h4V6h3l-5-5-5 5h3v3zm-1 1H6V7l-5 5 5 5v-3h3v-4zm14 2l-5-5v3h-3v4h3v3l5-5zm-9 3h-4v3H7l5 5 5-5h-3v-3z"/></svg>`;
-      this.btnTwoFingerMode.title = '2-Finger Mode: Pan (Click to Orbit)';
-      this.btnTwoFingerMode.classList.remove('active');
-    }
   }
 
   private render(): void {
@@ -111,9 +97,6 @@ export class Toolbar {
         <button id="btn-snap" class="tool-button" title="Snap View to Canvas">
           <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
         </button>
-        <button id="btn-two-finger-mode" class="tool-button active" title="2-Finger Mode: Orbit (Click to Pan)">
-          <svg viewBox="0 0 24 24"><path d="M12 2.5C7.4 2.5 3.5 5.8 2.6 10H4.7c.9-3.2 3.8-5.5 7.3-5.5 4.1 0 7.5 3.4 7.5 7.5 0 1.2-.3 2.3-.8 3.3l-1.9-1.9v5.5h5.5l-2.1-2.1c.8-1.4 1.3-3 1.3-4.8 0-5.2-4.3-9.5-9.5-9.5z"/></svg>
-        </button>
         <button id="btn-timeline" class="tool-button" title="Bookmark Flythrough Tour">
           <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/></svg>
         </button>
@@ -139,7 +122,6 @@ export class Toolbar {
     this.btnLiquify = this.rootElement.querySelector('#tool-liquify') as HTMLButtonElement;
     this.btnUndo = this.rootElement.querySelector('#btn-undo') as HTMLButtonElement;
     this.btnRedo = this.rootElement.querySelector('#btn-redo') as HTMLButtonElement;
-    this.btnTwoFingerMode = this.rootElement.querySelector('#btn-two-finger-mode') as HTMLButtonElement;
 
     this.bindEvents();
   }
@@ -185,6 +167,5 @@ export class Toolbar {
 
     this.btnUndo.addEventListener('click', () => this.callbacks.onUndo());
     this.btnRedo.addEventListener('click', () => this.callbacks.onRedo());
-    this.btnTwoFingerMode.addEventListener('click', () => this.callbacks.onToggleTwoFingerMode());
   }
 }
