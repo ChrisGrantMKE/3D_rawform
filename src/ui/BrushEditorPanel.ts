@@ -76,8 +76,8 @@ export class BrushEditorPanel {
     });
 
     const bindSlider = (id: string, labelId: string, key: keyof BrushProfile) => {
-      const slider = this.rootElement.querySelector(\`#\${id}\`) as HTMLInputElement;
-      const label = this.rootElement.querySelector(\`#\${labelId}\`) as HTMLElement;
+      const slider = this.rootElement.querySelector(`#${id}`) as HTMLInputElement;
+      const label = this.rootElement.querySelector(`#${labelId}`) as HTMLElement;
       slider.addEventListener('input', (e) => {
         const val = parseFloat((e.target as HTMLInputElement).value);
         label.textContent = val.toFixed(2);
@@ -96,8 +96,8 @@ export class BrushEditorPanel {
     if (!this.rootElement) return;
     
     const updateSlider = (id: string, labelId: string, val: number) => {
-      const slider = this.rootElement.querySelector(\`#\${id}\`) as HTMLInputElement;
-      const label = this.rootElement.querySelector(\`#\${labelId}\`) as HTMLElement;
+      const slider = this.rootElement.querySelector(`#${id}`) as HTMLInputElement;
+      const label = this.rootElement.querySelector(`#${labelId}`) as HTMLElement;
       if (slider && label) {
         slider.value = val.toString();
         label.textContent = val.toFixed(2);

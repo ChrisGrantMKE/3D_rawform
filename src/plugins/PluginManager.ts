@@ -43,12 +43,12 @@ export class PluginManager {
    */
   public registerPlugin(plugin: RawformPlugin): void {
     if (this.plugins.has(plugin.id)) {
-      console.warn(\`Plugin \${plugin.id} is already registered.\`);
+      console.warn(`Plugin ${plugin.id} is already registered.`);
       return;
     }
     this.plugins.set(plugin.id, plugin);
     plugin.onEnable(this.context);
-    console.log(\`[PluginManager] Enabled plugin: \${plugin.name} v\${plugin.version}\`);
+    console.log(`[PluginManager] Enabled plugin: ${plugin.name} v${plugin.version}`);
   }
 
   /**
@@ -59,7 +59,7 @@ export class PluginManager {
     if (plugin) {
       plugin.onDisable();
       this.plugins.delete(pluginId);
-      console.log(\`[PluginManager] Disabled plugin: \${plugin.name}\`);
+      console.log(`[PluginManager] Disabled plugin: ${plugin.name}`);
     }
   }
 
