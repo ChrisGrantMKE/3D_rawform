@@ -164,7 +164,11 @@ export class InputManager {
     if (e.pointerType === 'pen') {
       this.penHandler.handlePointerMove(e);
     } else if (e.pointerType === 'touch') {
-      if (!this.palmRejection.shouldRejectTouch(e)) {
+      if (this.activeTouchIds.has(e.pointerId) || !this.palmRejection.shouldRejectTouch(e)) {
+        if (!this.activeTouchIds.has(e.pointerId)) {
+           this.activeTouchIds.add(e.pointerId);
+           // Missed pointerdown? Let's not trigger down here, just allow move if it was already active
+        }
         this.touchHandler.handlePointerMove(e);
         if (this.activeTouchIds.size === 1 && this.activeTouchIds.has(e.pointerId)) {
           this.penHandler.handlePointerMove(e);

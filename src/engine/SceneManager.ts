@@ -73,6 +73,15 @@ export class SceneManager {
     arButton.style.left = 'auto';
     arButton.style.right = '20px';
     arButton.style.zIndex = '100'; // Lower z-index so it doesn't overlap core UI
+    
+    // Hide button entirely if AR is not supported to avoid UI clutter
+    const observer = new MutationObserver(() => {
+      if (arButton.textContent === 'AR NOT SUPPORTED') {
+        arButton.style.display = 'none';
+      }
+    });
+    observer.observe(arButton, { childList: true, characterData: true, subtree: true });
+    
     this.container.appendChild(arButton);
     
     // Auto-set background transparent when entering AR
