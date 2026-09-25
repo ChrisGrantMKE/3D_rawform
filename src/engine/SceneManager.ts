@@ -70,8 +70,9 @@ export class SceneManager {
     const arButton = ARButton.createButton(this.renderer);
     arButton.style.position = 'absolute';
     arButton.style.bottom = '20px';
-    arButton.style.left = '20px';
-    arButton.style.zIndex = '999';
+    arButton.style.left = 'auto';
+    arButton.style.right = '20px';
+    arButton.style.zIndex = '100'; // Lower z-index so it doesn't overlap core UI
     this.container.appendChild(arButton);
     
     // Auto-set background transparent when entering AR
