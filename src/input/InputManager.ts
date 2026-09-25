@@ -33,6 +33,7 @@ export class InputManager {
   private lastMouseX: number = 0;
   private lastMouseY: number = 0;
   private activeTouchIds: Set<number> = new Set();
+  private twoFingerMode: 'orbit' | 'pan' = 'orbit';
 
   private listeners?: InputManagerListeners;
 
@@ -58,6 +59,14 @@ export class InputManager {
    */
   public setListeners(listeners: InputManagerListeners): void {
     this.listeners = listeners;
+  }
+
+  public toggleTwoFingerMode(): void {
+    this.twoFingerMode = this.twoFingerMode === 'orbit' ? 'pan' : 'orbit';
+  }
+
+  public getTwoFingerMode(): 'orbit' | 'pan' {
+    return this.twoFingerMode;
   }
 
   /**
@@ -91,7 +100,13 @@ export class InputManager {
 
     const touchCallbacks: TouchGestureCallbacks = {
       onOrbit: (dTheta, dPhi) => this.listeners?.onCameraOrbit(dTheta, dPhi),
-      onPan: (dx, dy) => this.listeners?.onCameraPan(dx, dy),
+      onPan: (dx, dy) => {
+        if (this.twoFingerMode === 'orbit') {
+          this.listeners?.onCameraOrbit(dx * 0.005, dy * 0.005);
+        } else {
+          this.listeners?.onCameraPan(dx, dy);
+        }
+      },
       onZoom: (factor) => this.listeners?.onCameraZoom(factor),
       onGestureEnd: () => this.listeners?.onOrbitEnd?.(),
     };

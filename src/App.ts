@@ -362,6 +362,10 @@ export class App {
       onExportPNG: () => ImageExporter.downloadSnapshot(this.sceneManager.renderer.domElement),
       onExportGLTF: () => this.gltfExporter.downloadGLB(this.sceneManager.scene),
       onDownloadBlenderAddon: () => BlenderIntegration.downloadAddon(),
+      onToggleTwoFingerMode: () => {
+        this.inputManager.toggleTwoFingerMode();
+        this.toolbar.updateTwoFingerModeIcon(this.inputManager.getTwoFingerMode());
+      },
     });
 
     this.undoManager.onChange(() => {
