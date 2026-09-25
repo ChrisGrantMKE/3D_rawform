@@ -86,7 +86,20 @@ export class PenHandler {
    * Extracts calibrated stroke point attributes from a pointer event.
    */
   private extractStrokePoint(event: PointerEvent): StrokePoint {
-    const rawPressure = event.pressure > 0 ? event.pressure : 0.5;
+    let rawPressure = event.pressure;
+    if (event.pointerType === 'touch') {
+      if (!rawPressure || rawPressure === 0.5 || rawPressure === 0) {
+        const size = Math.max(event.width || 0, event.height || 0);
+        if (size > 0) {
+          rawPressure = Math.min(1.0, size / 30.0);
+        } else {
+          rawPressure = 0.5;
+        }
+      }
+    } else {
+      rawPressure = rawPressure > 0 ? rawPressure : 0.5;
+    }
+
     return {
       x: event.clientX,
       y: event.clientY,

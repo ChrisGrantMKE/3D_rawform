@@ -32,6 +32,7 @@ export class InputManager {
   private isDepthAdjusting: boolean = false;
   private lastMouseX: number = 0;
   private lastMouseY: number = 0;
+  private activeTouchIds: Set<number> = new Set();
 
   private listeners?: InputManagerListeners;
 
@@ -124,7 +125,15 @@ export class InputManager {
       this.penHandler.handlePointerDown(e);
     } else if (e.pointerType === 'touch') {
       if (!this.palmRejection.shouldRejectTouch(e)) {
+        this.activeTouchIds.add(e.pointerId);
         this.touchHandler.handlePointerDown(e);
+
+        if (this.activeTouchIds.size === 1) {
+          this.penHandler.handlePointerDown(e);
+        } else if (this.activeTouchIds.size === 2) {
+          // Cancel drawing when multi-touch starts
+          this.penHandler.handlePointerUp(e);
+        }
       }
     } else {
       // Mouse interaction: Left click draws, Right/Alt+Left orbits, Middle/Shift+Left pans
@@ -157,6 +166,9 @@ export class InputManager {
     } else if (e.pointerType === 'touch') {
       if (!this.palmRejection.shouldRejectTouch(e)) {
         this.touchHandler.handlePointerMove(e);
+        if (this.activeTouchIds.size === 1 && this.activeTouchIds.has(e.pointerId)) {
+          this.penHandler.handlePointerMove(e);
+        }
       }
     } else {
       if (e.buttons === 1 && !e.altKey && !e.shiftKey && !this.isMouseOrbiting && !this.isMousePanning) {
@@ -191,6 +203,10 @@ export class InputManager {
       this.penHandler.handlePointerUp(e);
     } else if (e.pointerType === 'touch') {
       this.touchHandler.handlePointerUp(e);
+      if (this.activeTouchIds.size === 1 && this.activeTouchIds.has(e.pointerId)) {
+        this.penHandler.handlePointerUp(e);
+      }
+      this.activeTouchIds.delete(e.pointerId);
     } else {
       if (!this.isMouseOrbiting && !this.isMousePanning) {
         this.penHandler.handlePointerUp(e);

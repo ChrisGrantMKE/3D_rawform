@@ -39,6 +39,8 @@ export class TouchHandler {
 
     if (this.activeTouches.size === 2) {
       this.initTwoFingerGesture();
+    } else if (this.activeTouches.size === 3) {
+      this.initThreeFingerGesture();
     }
   }
 
@@ -52,14 +54,12 @@ export class TouchHandler {
     const current: TouchPoint = { id: event.pointerId, x: event.clientX, y: event.clientY };
     this.activeTouches.set(event.pointerId, current);
 
-    if (this.activeTouches.size === 1) {
-      // 1-finger orbit
-      const dx = current.x - prev.x;
-      const dy = current.y - prev.y;
-      this.callbacks?.onOrbit(dx * 0.005, dy * 0.005);
-    } else if (this.activeTouches.size === 2) {
+    if (this.activeTouches.size === 2) {
       // 2-finger pinch & pan
       this.processTwoFingerGesture();
+    } else if (this.activeTouches.size === 3) {
+      // 3-finger orbit
+      this.processThreeFingerGesture();
     }
   }
 
@@ -70,6 +70,8 @@ export class TouchHandler {
     this.activeTouches.delete(event.pointerId);
     if (this.activeTouches.size === 2) {
       this.initTwoFingerGesture();
+    } else if (this.activeTouches.size === 3) {
+      this.initThreeFingerGesture();
     } else if (this.activeTouches.size === 0) {
       this.callbacks?.onGestureEnd?.();
     }
@@ -112,6 +114,28 @@ export class TouchHandler {
     this.callbacks?.onPan(panDx, panDy);
 
     this.prevTouchDistance = currentDist;
+    this.prevCenter = currentCenter;
+  }
+
+  private initThreeFingerGesture(): void {
+    const touches = Array.from(this.activeTouches.values());
+    if (touches.length < 3) return;
+    this.prevCenter = {
+      x: (touches[0].x + touches[1].x + touches[2].x) / 3,
+      y: (touches[0].y + touches[1].y + touches[2].y) / 3,
+    };
+  }
+
+  private processThreeFingerGesture(): void {
+    const touches = Array.from(this.activeTouches.values());
+    if (touches.length < 3) return;
+    const currentCenter = {
+      x: (touches[0].x + touches[1].x + touches[2].x) / 3,
+      y: (touches[0].y + touches[1].y + touches[2].y) / 3,
+    };
+    const dx = currentCenter.x - this.prevCenter.x;
+    const dy = currentCenter.y - this.prevCenter.y;
+    this.callbacks?.onOrbit(dx * 0.005, dy * 0.005);
     this.prevCenter = currentCenter;
   }
 }
