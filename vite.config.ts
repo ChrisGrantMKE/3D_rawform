@@ -22,6 +22,7 @@ export default defineConfig({
         theme_color: '#12141C',
         background_color: '#12141C',
         display: 'standalone',
+        start_url: process.env.GITHUB_ACTIONS ? '/3D_rawform/' : '/',
         icons: [
           {
             src: 'icon.svg',
