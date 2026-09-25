@@ -3,6 +3,7 @@ import path from 'path';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  base: process.env.GITHUB_ACTIONS ? '/3D_rawform/' : '/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
