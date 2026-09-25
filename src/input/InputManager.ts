@@ -73,8 +73,8 @@ export class InputManager {
   public dispose(): void {
     this.targetElement.removeEventListener('pointerdown', this.onPointerDown);
     this.targetElement.removeEventListener('pointermove', this.onPointerMove);
-    this.targetElement.removeEventListener('pointerup', this.onPointerUp);
-    this.targetElement.removeEventListener('pointercancel', this.onPointerUp);
+    window.removeEventListener('pointerup', this.onPointerUp);
+    window.removeEventListener('pointercancel', this.onPointerUp);
     this.targetElement.removeEventListener('wheel', this.onWheel);
     this.targetElement.removeEventListener('contextmenu', this.onContextMenu);
   }
@@ -104,8 +104,8 @@ export class InputManager {
   private bindEvents(): void {
     this.targetElement.addEventListener('pointerdown', this.onPointerDown, { passive: false });
     this.targetElement.addEventListener('pointermove', this.onPointerMove, { passive: false });
-    this.targetElement.addEventListener('pointerup', this.onPointerUp, { passive: false });
-    this.targetElement.addEventListener('pointercancel', this.onPointerUp, { passive: false });
+    window.addEventListener('pointerup', this.onPointerUp, { passive: false });
+    window.addEventListener('pointercancel', this.onPointerUp, { passive: false });
     this.targetElement.addEventListener('wheel', this.onWheel, { passive: false });
     this.targetElement.addEventListener('contextmenu', this.onContextMenu);
   }
@@ -194,7 +194,10 @@ export class InputManager {
   };
 
   private onPointerUp = (e: PointerEvent): void => {
-    e.preventDefault();
+    // Only prevent default if it originated from our canvas, to not break the whole window
+    if (e.target === this.targetElement) {
+      e.preventDefault();
+    }
 
     if (this.isDepthAdjusting) {
       this.isDepthAdjusting = false;

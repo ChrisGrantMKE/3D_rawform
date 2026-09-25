@@ -5,7 +5,7 @@ export class PalmRejection {
   private penIsDown: boolean = false;
   private lastPenTime: number = 0;
   private readonly temporalThresholdMs: number = 100;
-  private readonly palmContactThresholdPx: number = 80;
+  private readonly palmContactThresholdPx: number = 200;
 
   /**
    * Records that stylus has contacted the screen.
