@@ -19,6 +19,7 @@ import { ColorPicker } from './ui/ColorPicker';
 import { CanvasPanel } from './ui/CanvasPanel';
 import { LayerPanel } from './ui/LayerPanel';
 import { GuidePanel } from './ui/GuidePanel';
+import { BrushEditorPanel } from './ui/BrushEditorPanel';
 import { BookmarkTimeline } from './ui/BookmarkTimeline';
 import { BirdsEyeView, type MinimapCanvasItem } from './ui/BirdsEyeView';
 import { ImageExporter } from './export/ImageExporter';
@@ -26,6 +27,8 @@ import { GLTFExporterWrapper } from './export/GLTFExporterWrapper';
 import { OBJExporterWrapper } from './export/OBJExporterWrapper';
 import { VideoExporter } from './export/VideoExporter';
 import { AssetImporter } from './export/AssetImporter';
+import { BlenderIntegration } from './export/BlenderIntegration';
+import { PluginManager } from './plugins/PluginManager';
 import { PlanePreview } from './engine/PlanePreview';
 import { SpatialSnapper } from './engine/SpatialSnapper';
 import type { SpatialPlaneType, SpatialCanvasData } from './types/canvas';
@@ -56,8 +59,11 @@ export class App {
   private liquifyTool!: LiquifyTool;
   private currentTool!: Tool;
 
+  private pluginManager!: PluginManager;
+  
   private toolbar!: Toolbar;
   private colorPicker!: ColorPicker;
+  private brushEditorPanel!: BrushEditorPanel;
   private canvasPanel!: CanvasPanel;
   private layerPanel!: LayerPanel;
   private guidePanel!: GuidePanel;
@@ -123,6 +129,17 @@ export class App {
     });
 
     this.snapToActiveCanvas();
+
+    // Initialize Plugin Architecture
+    this.pluginManager = new PluginManager({
+      app: this,
+      state: this.projectState,
+      sceneManager: this.sceneManager,
+      renderer: this.strokeRenderer,
+      undoManager: this.undoManager,
+      toolbar: this.toolbar,
+      uiLayer: this.uiLayer,
+    });
   }
 
   private setupCanvases(): void {
@@ -240,6 +257,14 @@ export class App {
       onProfileSelect: (p) => this.handleProfileSelect(p),
     });
 
+    this.brushEditorPanel = new BrushEditorPanel(
+      this.uiLayer,
+      this.projectState.getBrushProfile(),
+      {
+        onProfileUpdate: (profile) => this.projectState.setBrushProfile(profile),
+      }
+    );
+
     this.canvasPanel = new CanvasPanel(this.uiLayer, {
       onSelectCanvas: (id) => this.handleSelectCanvas(id),
       onCreateCanvas: (name, type) => this.handleCreateCanvas(name, type),
@@ -314,6 +339,7 @@ export class App {
     this.toolbar = new Toolbar(this.uiLayer, {
       onToolSelect: (tool) => this.switchTool(tool),
       onToggleColorPanel: () => this.colorPicker.toggle(),
+      onToggleBrushEditor: () => this.brushEditorPanel.toggle(),
       onToggleCanvasPanel: () => {
         this.canvasPanel.updateCanvases(
           this.projectState.getProject().canvases,
@@ -335,6 +361,7 @@ export class App {
       onRedo: () => this.undoManager.redo(),
       onExportPNG: () => ImageExporter.downloadSnapshot(this.sceneManager.renderer.domElement),
       onExportGLTF: () => this.gltfExporter.downloadGLB(this.sceneManager.scene),
+      onDownloadBlenderAddon: () => BlenderIntegration.downloadAddon(),
     });
 
     this.undoManager.onChange(() => {
@@ -348,6 +375,9 @@ export class App {
       },
       onBookmarksUpdated: (bms) => {
         this.bookmarkTimeline.updateBookmarks(bms);
+      },
+      onBrushProfileChanged: (profile) => {
+        this.brushEditorPanel.updateProfile(profile);
       },
     });
   }

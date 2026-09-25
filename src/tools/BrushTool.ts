@@ -183,7 +183,8 @@ export class BrushTool extends Tool {
     }
 
     if (this.collectedPoints.length >= 2) {
-      const smoothed = CurveSmoothing.smooth(this.collectedPoints, 0.04, 0.5);
+      const tension = this.state.getBrushProfile().smoothingTension;
+      const smoothed = CurveSmoothing.smooth(this.collectedPoints, 0.04, tension);
       this.renderer.updateActiveStroke(smoothed);
 
       if (this.mirrorAxis) {
@@ -211,7 +212,8 @@ export class BrushTool extends Tool {
 
     const activeCanvas = this.activeCanvasProvider();
     const canvasId = activeCanvas ? activeCanvas.id : 'spatial_guide';
-    const smoothedPoints = CurveSmoothing.smooth(this.collectedPoints, 0.04, 0.5);
+    const tension = this.state.getBrushProfile().smoothingTension;
+    const smoothedPoints = CurveSmoothing.smooth(this.collectedPoints, 0.04, tension);
 
     if (activeCanvas) {
       activeCanvas.expandBoundsToFit(smoothedPoints.map((p) => new Vector3(p.x, p.y, p.z)));
@@ -270,7 +272,9 @@ export class BrushTool extends Tool {
 
   private calculateWidth(pressure: number): number {
     const base = this.state.getWidth();
-    return base * (0.3 + 1.4 * pressure);
+    const profile = this.state.getBrushProfile();
+    const ratio = profile.minWidthRatio + (profile.maxWidthRatio - profile.minWidthRatio) * Math.min(1.0, pressure * profile.pressureSensitivity);
+    return base * ratio;
   }
 
   private findHitPoint(screenX: number, screenY: number): { x: number; y: number; z: number } | null {

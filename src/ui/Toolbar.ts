@@ -3,6 +3,7 @@ import type { ActiveToolType } from '../state/ProjectState';
 export interface ToolbarCallbacks {
   onToolSelect: (tool: ActiveToolType) => void;
   onToggleColorPanel: () => void;
+  onToggleBrushEditor: () => void;
   onToggleCanvasPanel: () => void;
   onToggleLayerPanel: () => void;
   onToggleGuidePanel: () => void;
@@ -12,6 +13,7 @@ export interface ToolbarCallbacks {
   onRedo: () => void;
   onExportPNG: () => void;
   onExportGLTF: () => void;
+  onDownloadBlenderAddon: () => void;
 }
 
 /**
@@ -80,6 +82,9 @@ export class Toolbar {
         <button id="btn-color" class="tool-button" title="Palette & Brush Width">
           <svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L4.35 19.4c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0l1.9-1.9C9.22 19.58 10.57 20 12 20c4.97 0 9-4.03 9-9s-4.03-9-9-9zm0 15c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z"/></svg>
         </button>
+        <button id="btn-brush-editor" class="tool-button" title="Custom Brush Editor">
+          <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+        </button>
         <button id="btn-canvases" class="tool-button" title="Spatial Canvases">
           <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 10h10v2H7zm0-3h10v2H7zm0 6h7v2H7z"/></svg>
         </button>
@@ -94,6 +99,9 @@ export class Toolbar {
         </button>
         <button id="btn-timeline" class="tool-button" title="Bookmark Flythrough Tour">
           <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/></svg>
+        </button>
+        <button id="btn-blender" class="tool-button" title="Download Blender Addon">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
         </button>
       </div>
       <div class="toolbar-separator"></div>
@@ -129,6 +137,10 @@ export class Toolbar {
       this.callbacks.onToggleColorPanel();
     });
 
+    this.rootElement.querySelector('#btn-brush-editor')?.addEventListener('click', () => {
+      this.callbacks.onToggleBrushEditor();
+    });
+
     this.rootElement.querySelector('#btn-canvases')?.addEventListener('click', () => {
       this.callbacks.onToggleCanvasPanel();
     });
@@ -147,6 +159,10 @@ export class Toolbar {
 
     this.rootElement.querySelector('#btn-timeline')?.addEventListener('click', () => {
       this.callbacks.onToggleTimeline();
+    });
+
+    this.rootElement.querySelector('#btn-blender')?.addEventListener('click', () => {
+      this.callbacks.onDownloadBlenderAddon();
     });
 
     this.btnUndo.addEventListener('click', () => this.callbacks.onUndo());

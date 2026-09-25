@@ -5,6 +5,7 @@ import type { SpatialCanvasData, SpatialPlaneType } from '../types/canvas';
 import type { StrokeData } from '../types/stroke';
 import type { CameraBookmark } from '../types/bookmark';
 import type { LayerData } from '../types/layer';
+import type { BrushProfile } from '../types/stroke';
 
 export type ActiveToolType = 'brush' | 'eraser' | 'select' | 'shape' | 'liquify' | 'pan';
 
@@ -14,6 +15,7 @@ export interface ProjectStateListeners {
   onToolChanged?: (tool: ActiveToolType) => void;
   onColorChanged?: (color: string) => void;
   onWidthChanged?: (width: number) => void;
+  onBrushProfileChanged?: (profile: BrushProfile) => void;
   onBookmarksUpdated?: (bookmarks: CameraBookmark[]) => void;
   onLayersUpdated?: (layers: LayerData[]) => void;
 }
@@ -30,6 +32,16 @@ export class ProjectState {
   private currentColor: string = '#818cf8';
   private currentWidth: number = 0.15;
   private currentOpacity: number = 1.0;
+  private brushProfile: BrushProfile = {
+    id: 'default',
+    name: 'Default',
+    baseWidth: 0.15,
+    minWidthRatio: 0.3,
+    maxWidthRatio: 1.4,
+    pressureSensitivity: 1.0,
+    smoothingTension: 0.5,
+    opacity: 1.0
+  };
   private autoSaveTimer: number | null = null;
   private listeners: ProjectStateListeners = {};
 
@@ -176,6 +188,12 @@ export class ProjectState {
 
   public getOpacity(): number { return this.currentOpacity; }
   public setOpacity(opacity: number): void { this.currentOpacity = opacity; }
+
+  public getBrushProfile(): BrushProfile { return this.brushProfile; }
+  public setBrushProfile(profile: BrushProfile): void {
+    this.brushProfile = { ...profile };
+    this.listeners.onBrushProfileChanged?.(this.brushProfile);
+  }
 
   /**
    * Persists project metadata to Dexie.js database.

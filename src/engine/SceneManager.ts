@@ -9,6 +9,7 @@ import {
 import { CameraController } from './CameraController';
 import { PostProcessPipeline, type PostFxMode } from './PostProcessPipeline';
 import { AtmosphereEnvironment } from './AtmosphereEnvironment';
+import { ARButton } from 'three/addons/webxr/ARButton.js';
 
 export type BackgroundStyle = 'dark' | 'studio' | 'light' | 'transparent';
 export type { PostFxMode };
@@ -49,8 +50,9 @@ export class SceneManager {
 
     this.renderer = new WebGPURenderer({
       antialias: true,
-      alpha: false,
+      alpha: true, // Required for AR passthrough
     });
+    this.renderer.xr.enabled = true;
     this.renderer.setSize(width, height);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
@@ -63,6 +65,22 @@ export class SceneManager {
 
     this.setupLighting();
     this.setupResizeListener();
+
+    // Add AR Button overlay
+    const arButton = ARButton.createButton(this.renderer);
+    arButton.style.position = 'absolute';
+    arButton.style.bottom = '20px';
+    arButton.style.left = '20px';
+    arButton.style.zIndex = '999';
+    this.container.appendChild(arButton);
+    
+    // Auto-set background transparent when entering AR
+    this.renderer.xr.addEventListener('sessionstart', () => {
+      this.setBackgroundStyle('transparent');
+    });
+    this.renderer.xr.addEventListener('sessionend', () => {
+      this.setBackgroundStyle('dark');
+    });
   }
 
   /**
