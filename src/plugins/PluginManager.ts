@@ -1,5 +1,5 @@
 import type { App } from '../App';
-import type { ProjectState, ActiveToolType } from '../state/ProjectState';
+import type { ProjectState } from '../state/ProjectState';
 import type { SceneManager } from '../engine/SceneManager';
 import type { StrokeRenderer } from '../engine/StrokeRenderer';
 import type { UndoRedoManager } from '../state/UndoRedoManager';

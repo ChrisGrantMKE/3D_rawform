@@ -67,7 +67,7 @@ export class SceneManager {
     this.setupResizeListener();
 
     // Add AR Button overlay
-    const arButton = ARButton.createButton(this.renderer);
+    const arButton = ARButton.createButton(this.renderer as any);
     arButton.style.position = 'absolute';
     arButton.style.bottom = '20px';
     arButton.style.left = 'auto';

@@ -58,8 +58,6 @@ export class App {
   private shapeTool!: ShapeTool;
   private liquifyTool!: LiquifyTool;
   private currentTool!: Tool;
-
-  private pluginManager!: PluginManager;
   
   private toolbar!: Toolbar;
   private colorPicker!: ColorPicker;
